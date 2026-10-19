@@ -21,21 +21,24 @@
 
     <style>
         :root {
-            --md-surface: rgba(16, 17, 24, 0.84);
+            --md-surface: rgba(14, 15, 22, 0.90);
             --md-border: rgba(212, 175, 55, 0.22);
         }
         * {
             user-select: none;
             -webkit-user-select: none;
+            -webkit-touch-callout: none;
         }
         body, html {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
+            height: 100dvh;
             overflow: hidden;
             background-color: #07080d;
             font-family: 'Inter', sans-serif;
+            touch-action: none;
         }
         .font-gothic {
             font-family: 'Cinzel', serif;
@@ -44,28 +47,30 @@
             font-family: 'JetBrains Mono', monospace;
         }
         #canvas-container {
-            position: absolute;
+            position: fixed;
             inset: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100dvh;
             z-index: 1;
+            touch-action: none;
         }
         canvas {
             display: block;
             width: 100%;
             height: 100%;
             outline: none;
+            touch-action: none;
         }
         /* Material Design 3 Glassmorphic Surface */
         .md3-card {
             background: var(--md-surface);
-            backdrop-filter: blur(18px);
-            -webkit-backdrop-filter: blur(18px);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
             border: 1px solid var(--md-border);
-            box-shadow: 0 14px 38px -6px rgba(0, 0, 0, 0.78);
+            box-shadow: 0 18px 42px -8px rgba(0, 0, 0, 0.85);
         }
         .md3-btn {
-            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+            transition: all 0.18s cubic-bezier(0.2, 0, 0, 1);
             position: relative;
             overflow: hidden;
         }
@@ -84,205 +89,291 @@
             background: rgba(212, 175, 55, 0.45);
             border-radius: 9999px;
         }
-        @keyframes pulse-glow {
-            0%, 100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
-            50% { box-shadow: 0 0 24px rgba(245, 158, 11, 0.85); }
+        .safe-top-right {
+            top: max(0.75rem, env(safe-area-inset-top));
+            right: max(0.75rem, env(safe-area-inset-right));
         }
-        .turn-glow {
-            animation: pulse-glow 2.2s infinite ease-in-out;
+        .safe-top-left {
+            top: max(0.75rem, env(safe-area-inset-top));
+            left: max(0.75rem, env(safe-area-inset-left));
         }
-        @keyframes gothic-banner-pop {
-            0% { transform: translate(-50%, -50%) scale(0.82); opacity: 0; filter: blur(6px); }
-            20% { transform: translate(-50%, -50%) scale(1.04); opacity: 1; filter: blur(0px); }
-            80% { transform: translate(-50%, -58%) scale(1.0); opacity: 1; }
-            100% { transform: translate(-50%, -75%) scale(0.94); opacity: 0; }
+        @keyframes subtle-toast {
+            0% { transform: translateY(-8px); opacity: 0; }
+            15% { transform: translateY(0); opacity: 1; }
+            85% { transform: translateY(0); opacity: 1; }
+            100% { transform: translateY(-8px); opacity: 0; }
         }
-        .gothic-banner-anim {
-            animation: gothic-banner-pop 1.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        @keyframes emote-float {
-            0% { transform: translateY(12px) scale(0.8); opacity: 0; }
-            15% { transform: translateY(0px) scale(1.05); opacity: 1; }
-            85% { transform: translateY(-6px) scale(1); opacity: 1; }
-            100% { transform: translateY(-20px) scale(0.9); opacity: 0; }
-        }
-        .emote-bubble {
-            animation: emote-float 3.2s ease-out forwards;
+        .toast-item {
+            animation: subtle-toast 2.6s ease-out forwards;
         }
     </style>
 </head>
 <body class="text-slate-100 antialiased">
 
-    <!-- 3D WebGL Viewport -->
+    <!-- 3D WebGL Viewport (100% Unobstructed Fullscreen) -->
     <div id="canvas-container"></div>
 
-    <!-- IMPACT FLASH & GOTHIC COMBAT HERALDRY OVERLAY -->
-    <div id="impact-flash" class="fixed inset-0 z-20 pointer-events-none opacity-0 transition-opacity duration-100 bg-amber-100/40 mix-blend-overlay"></div>
-    <div id="combat-herald-layer" class="fixed inset-0 z-30 pointer-events-none overflow-hidden"></div>
+    <!-- Subtle Impact Flash (No Text Overlays in Center) -->
+    <div id="impact-flash" class="fixed inset-0 z-10 pointer-events-none opacity-0 transition-opacity duration-150 bg-amber-100/20 mix-blend-overlay"></div>
 
-    <!-- FLOATING EMOTE CHAT BUBBLES -->
-    <div id="emote-container" class="fixed top-20 left-1/2 -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center gap-2"></div>
+    <!-- Subtle Top-Left Notification Toast (Non-intrusive corner updates) -->
+    <div id="emote-container" class="fixed safe-top-left z-20 pointer-events-none flex flex-col items-start gap-1.5 max-w-[260px]"></div>
 
-    <!-- Single-Level Material Design 3 HUD Overlay -->
-    <div class="relative z-10 pointer-events-none w-full h-full flex flex-col justify-between p-2.5 sm:p-4">
-
-        <!-- TOP BAR: Dual Player Clocks, Turn Status & Online PvP Badge -->
-        <header class="w-full flex flex-wrap items-center justify-between gap-2">
-            <!-- Brand & Live PvP Status -->
-            <div class="md3-card pointer-events-auto rounded-2xl px-3.5 py-2 flex items-center gap-2.5">
-                <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shadow-inner">
-                    <span class="material-symbols-outlined text-xl">castle</span>
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <h1 class="font-gothic text-xs sm:text-sm font-bold tracking-wider text-amber-100">WIZARD'S CHESS</h1>
-                        <span id="online-badge" class="text-[10px] font-sans font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">vs. Archmage AI</span>
-                    </div>
-                    <p id="sub-status" class="text-[10px] text-slate-400 hidden sm:block">Carrara Marble & Gold vs. Volcanic Obsidian</p>
-                </div>
-            </div>
-
-            <!-- Center Dual Player Clocks & Turn Indicator -->
-            <div class="md3-card pointer-events-auto rounded-full px-2.5 py-1.5 flex items-center gap-2 sm:gap-3 border-amber-500/30">
-                <!-- White Player Pill + Clock -->
-                <div id="white-clock-pill" class="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/25 border border-amber-400/50 transition-all">
-                    <span class="w-2.5 h-2.5 rounded-full bg-amber-100 shadow-[0_0_8px_#fef3c7]"></span>
-                    <div class="flex flex-col">
-                        <span id="white-player-name" class="text-[10px] font-bold uppercase tracking-wider text-amber-100 leading-none">White Marble</span>
-                        <span id="captured-black" class="text-[10px] text-amber-300/90 leading-tight min-h-[12px]"></span>
-                    </div>
-                    <span id="clock-w" class="font-mono-code text-xs sm:text-sm font-bold text-amber-50 bg-black/40 px-2 py-0.5 rounded-md">10:00</span>
-                </div>
-
-                <!-- VS / Turn Status Badge -->
-                <div class="flex flex-col items-center px-1">
-                    <span id="turn-text" class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-200">White Turn</span>
-                    <span id="status-badge" class="hidden text-[9px] font-extrabold uppercase px-2 py-0.2 rounded-full bg-rose-500/40 text-rose-200 border border-rose-400/50">CHECK</span>
-                </div>
-
-                <!-- Black Player Pill + Clock -->
-                <div id="black-clock-pill" class="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 transition-all">
-                    <span id="clock-b" class="font-mono-code text-xs sm:text-sm font-bold text-rose-200 bg-black/40 px-2 py-0.5 rounded-md">10:00</span>
-                    <div class="flex flex-col text-right">
-                        <span id="black-player-name" class="text-[10px] font-bold uppercase tracking-wider text-rose-200 leading-none">Black Obsidian</span>
-                        <span id="captured-white" class="text-[10px] text-rose-300/90 leading-tight min-h-[12px]"></span>
-                    </div>
-                    <span class="w-2.5 h-2.5 rounded-full bg-rose-600 shadow-[0_0_8px_#f43f5e]"></span>
-                </div>
-            </div>
-
-            <!-- Quick Emote Bar -->
-            <div class="md3-card pointer-events-auto rounded-2xl px-2.5 py-1.5 flex items-center gap-1">
-                <button data-emote="🐘 The Imperial War Elephant advances!" class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="War Elephant Herald">🐘</button>
-                <button data-emote="⚔️ Steel and stone shall shatter you!" class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="Battle Challenge">⚔️</button>
-                <button data-emote="✨ Masterful tactical maneuver." class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="Compliment Move">✨</button>
-                <button data-emote="👑 Guard your Sovereign!" class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="Royal Warning">👑</button>
-                <button data-emote="🤝 Well fought, noble adversary." class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="Well Fought">🤝</button>
-            </div>
-        </header>
-
-        <!-- MIDDLE AREA: Collapsible Move Log & Sculpted Piece Roster on Right -->
-        <div class="flex-1 flex items-center justify-end my-2 overflow-hidden">
-            <aside id="history-panel" class="md3-card pointer-events-auto w-64 sm:w-72 max-h-[56vh] rounded-3xl p-3.5 flex flex-col transition-all duration-300">
-                <div class="flex items-center justify-between pb-2 mb-2 border-b border-white/10">
-                    <div class="flex items-center gap-1.5">
-                        <span class="material-symbols-outlined text-amber-300 text-base">history_edu</span>
-                        <h2 class="text-[11px] font-bold uppercase tracking-wider text-slate-200">Sanctum Chronicle</h2>
-                    </div>
-                    <span id="move-counter" class="text-[10px] font-mono-code px-2 py-0.5 rounded-md bg-white/5 text-slate-400">0 ply</span>
-                </div>
-
-                <!-- Sculpted Guardian Roster Reference -->
-                <div class="grid grid-cols-2 gap-1 mb-2 pb-2 border-b border-white/10 text-[10px] text-slate-300">
-                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Rook: Imperial War Elephant with Gothic Howdah">
-                        <span class="font-semibold text-amber-200">♜ Rook</span><span class="text-slate-400">War Elephant</span>
-                    </div>
-                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Knight: Armored Destrier Warhorse & Cavalier">
-                        <span class="font-semibold text-amber-200">♞ Knight</span><span class="text-slate-400">Destrier Lancer</span>
-                    </div>
-                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Bishop: High Cathedral Inquisitor with Crosier & Censer">
-                        <span class="font-semibold text-amber-200">♝ Bishop</span><span class="text-slate-400">Arch-Prelate</span>
-                    </div>
-                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Queen: Gothic Battle-Empress with Longsword & Orb">
-                        <span class="font-semibold text-amber-200">♛ Queen</span><span class="text-slate-400">Battle-Empress</span>
-                    </div>
-                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="King: High Sovereign Monarch with Two-Handed Broadsword">
-                        <span class="font-semibold text-amber-200">♚ King</span><span class="text-slate-400">High Sovereign</span>
-                    </div>
-                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Pawn: Heavy Infantry Halberdier with Kite Shield">
-                        <span class="font-semibold text-amber-200">♟ Pawn</span><span class="text-slate-400">Halberdier</span>
-                    </div>
-                </div>
-
-                <!-- Algebraic Move List -->
-                <div id="move-list" class="flex-1 overflow-y-auto pr-1 space-y-1 text-xs font-mono-code text-slate-300">
-                    <div class="text-slate-400 italic text-center py-4 font-sans text-[11px]">Select any sculpted piece to illuminate legal square boxes & targets.</div>
-                </div>
-
-                <!-- Animation Status & Material Score -->
-                <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
-                    <span id="anim-status" class="flex items-center gap-1.5 text-amber-300/90 truncate">
-                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-                        Sanctum Ready
-                    </span>
-                    <span id="eval-score" class="font-mono-code text-slate-300">Even</span>
-                </div>
-            </aside>
+    <!-- MINIMALIST TOP-RIGHT CORNER HUD: Tiny Turn Pill + Single Options Button -->
+    <div class="fixed safe-top-right z-30 flex items-center gap-2 pointer-events-auto">
+        <!-- Non-intrusive Turn, Active Clock & Check Pill -->
+        <div id="minimal-turn-pill" class="md3-card rounded-full px-3 py-1.5 flex items-center gap-2 border border-white/10 shadow-lg transition-colors duration-300">
+            <span id="turn-dot" class="w-2 h-2 rounded-full bg-amber-100 shadow-[0_0_6px_#fef3c7]"></span>
+            <span id="turn-text" class="text-[11px] font-semibold tracking-wider uppercase text-amber-100">White</span>
+            <span id="hud-clock-divider" class="text-white/20 text-[10px]">•</span>
+            <span id="hud-active-clock" class="font-mono-code text-[11px] font-bold text-amber-200 tracking-tight">10:00</span>
+            <span id="hud-pause-badge" class="hidden text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-amber-500/30 text-amber-200 border border-amber-400/40">PAUSED</span>
+            <span id="status-badge" class="hidden text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-rose-500/40 text-rose-200 border border-rose-400/50">CHECK</span>
         </div>
 
-        <!-- BOTTOM BAR: Single-Level Material Design 3 Navigation Dock -->
-        <footer class="w-full flex justify-center">
-            <nav aria-label="Primary Controls" class="md3-card pointer-events-auto rounded-full px-3 py-1.5 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+        <!-- Quick Auto-Fit Camera Button -->
+        <button id="btn-quick-fit" class="md3-card md3-btn w-9 h-9 rounded-full flex items-center justify-center text-slate-300 hover:text-amber-200 hover:border-amber-400/40" title="Auto-Fit Board to Screen">
+            <span class="material-symbols-outlined text-[18px]">center_focus_strong</span>
+        </button>
 
-                <!-- Online PvP Lobby / Invite Friend Button -->
-                <button id="btn-pvp-lobby" class="md3-btn flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/40 text-xs font-bold shadow-sm" title="Host or Join Live Online PvP Match">
-                    <span class="material-symbols-outlined text-base">sensors</span>
-                    <span id="pvp-btn-label">Live PvP Room</span>
-                </button>
-
-                <!-- Game Mode Toggle (vs Archmage AI / Local 2P Pass & Play) -->
-                <button id="btn-mode" class="md3-btn flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 text-xs font-semibold" title="Switch between AI and Local 2-Player Pass & Play">
-                    <span class="material-symbols-outlined text-base" id="mode-icon">smart_toy</span>
-                    <span id="mode-label">Mode: vs. AI</span>
-                </button>
-
-                <!-- Auto-Rotate Camera on Turn (for Local 2P PvP) -->
-                <button id="btn-autoflip" class="md3-btn flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium" title="Auto-Rotate Camera for Local 2P Turn">
-                    <span class="material-symbols-outlined text-base">flip_camera_android</span>
-                    <span id="autoflip-label" class="hidden md:inline">Auto-Flip: Off</span>
-                </button>
-
-                <!-- Camera Preset Cycle -->
-                <button id="btn-camera" class="md3-btn flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium" title="Cycle Camera Angle">
-                    <span class="material-symbols-outlined text-base">videocam</span>
-                    <span id="camera-label">White View</span>
-                </button>
-
-                <!-- Undo Move -->
-                <button id="btn-undo" class="md3-btn flex items-center gap-1 px-3 py-2 rounded-full bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium" title="Undo Last Turn">
-                    <span class="material-symbols-outlined text-base">undo</span>
-                    <span class="hidden sm:inline">Undo</span>
-                </button>
-
-                <!-- Toggle Move History Drawer -->
-                <button id="btn-history" class="md3-btn flex items-center gap-1 px-3 py-2 rounded-full bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium" title="Show/Hide Battle Chronicle">
-                    <span class="material-symbols-outlined text-base">receipt_long</span>
-                    <span class="hidden sm:inline">Log</span>
-                </button>
-
-                <!-- Sound Effects Toggle -->
-                <button id="btn-sound" class="md3-btn flex items-center justify-center w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 text-slate-200" title="Toggle Sound">
-                    <span id="sound-icon" class="material-symbols-outlined text-base">volume_up</span>
-                </button>
-
-                <!-- Reset Game -->
-                <button id="btn-reset" class="md3-btn flex items-center gap-1 px-3.5 py-2 rounded-full bg-rose-500/20 hover:bg-rose-500/35 text-rose-200 border border-rose-400/30 text-xs font-semibold" title="Start a Fresh Duel">
-                    <span class="material-symbols-outlined text-base">restart_alt</span>
-                    <span>New Duel</span>
-                </button>
-            </nav>
-        </footer>
+        <!-- Primary Options Drawer Toggle Button -->
+        <button id="btn-open-options" class="md3-card md3-btn h-9 px-3.5 rounded-full flex items-center gap-1.5 text-amber-200 hover:bg-amber-500/20 border border-amber-400/30 text-xs font-semibold shadow-lg" title="Open Game Options & Controls">
+            <span class="material-symbols-outlined text-[18px]">tune</span>
+            <span>Options</span>
+        </button>
     </div>
+
+    <!-- SLIDE-OVER OPTIONS DRAWER & BACKDROP (Hidden by Default for Zero Distraction) -->
+    <div id="options-backdrop" class="fixed inset-0 z-40 hidden bg-black/60 backdrop-blur-xs transition-opacity"></div>
+
+    <aside id="options-drawer" class="fixed top-0 right-0 bottom-0 z-50 w-full max-w-sm md3-card border-l border-amber-400/25 translate-x-full transition-transform duration-300 ease-out flex flex-col justify-between overflow-y-auto p-4 sm:p-5">
+        <div class="space-y-4">
+            <!-- Drawer Header -->
+            <div class="flex items-center justify-between pb-3 border-b border-white/10">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
+                        <span class="material-symbols-outlined text-lg">castle</span>
+                    </div>
+                    <div>
+                        <h1 class="font-gothic text-sm font-bold tracking-wider text-amber-100">WIZARD'S CHESS</h1>
+                        <p id="online-badge" class="text-[10px] text-amber-300/80 font-medium">Mode: vs. Archmage AI</p>
+                    </div>
+                </div>
+                <button id="btn-close-options" class="md3-btn w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300" title="Close Options">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <!-- SECTION 1: Match Status, Clocks & Captured Pieces -->
+            <div class="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-2.5">
+                <div class="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                    <div class="flex items-center gap-1.5">
+                        <span>Match Timers</span>
+                        <span id="active-tc-badge" class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-200 border border-amber-400/30 font-mono-code text-[9px]">10+0</span>
+                    </div>
+                    <span id="eval-score" class="font-mono-code text-amber-200">Even</span>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <!-- White Clock Card -->
+                    <div id="white-clock-pill" class="p-2.5 rounded-xl bg-amber-500/15 border border-amber-400/40 flex flex-col justify-between transition-all">
+                        <div class="flex items-center justify-between">
+                            <span id="white-player-name" class="text-[10px] font-bold uppercase text-amber-100 truncate">White Marble</span>
+                            <span id="clock-w" class="font-mono-code text-xs font-bold text-amber-50 bg-black/40 px-1.5 py-0.5 rounded">10:00</span>
+                        </div>
+                        <div id="captured-black" class="text-xs text-amber-300/90 min-h-[16px] mt-1 tracking-tighter truncate"></div>
+                    </div>
+
+                    <!-- Black Clock Card -->
+                    <div id="black-clock-pill" class="p-2.5 rounded-xl bg-white/5 border border-white/10 flex flex-col justify-between transition-all">
+                        <div class="flex items-center justify-between">
+                            <span id="black-player-name" class="text-[10px] font-bold uppercase text-rose-200 truncate">Black Obsidian</span>
+                            <span id="clock-b" class="font-mono-code text-xs font-bold text-rose-200 bg-black/40 px-1.5 py-0.5 rounded">10:00</span>
+                        </div>
+                        <div id="captured-white" class="text-xs text-rose-300/90 min-h-[16px] mt-1 tracking-tighter truncate"></div>
+                    </div>
+                </div>
+
+                <!-- Time Controls & Customizer -->
+                <div class="pt-2 border-t border-white/10 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Time Control Presets</span>
+                        <button id="btn-pause-clock" class="md3-btn px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-[10px] font-semibold text-amber-200 flex items-center gap-1 border border-white/10">
+                            <span id="pause-clock-icon" class="material-symbols-outlined text-[13px]">pause</span>
+                            <span id="pause-clock-label">Pause Clock</span>
+                        </button>
+                    </div>
+
+                    <!-- Preset Pills Grid: Untimed, Bullet, Blitz, Rapid, Classical -->
+                    <div class="grid grid-cols-4 gap-1">
+                        <button data-min="0" data-inc="0" data-label="∞" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-slate-400 uppercase">Casual</span>
+                            <span class="font-mono-code text-xs">∞</span>
+                        </button>
+                        <button data-min="1" data-inc="0" data-label="1+0" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-rose-300/80 uppercase">Bullet</span>
+                            <span class="font-mono-code">1 min</span>
+                        </button>
+                        <button data-min="1" data-inc="1" data-label="1|1" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-rose-300/80 uppercase">Bullet</span>
+                            <span class="font-mono-code">1 | 1</span>
+                        </button>
+                        <button data-min="2" data-inc="1" data-label="2|1" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-rose-300/80 uppercase">Bullet</span>
+                            <span class="font-mono-code">2 | 1</span>
+                        </button>
+
+                        <button data-min="3" data-inc="0" data-label="3+0" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-amber-300/80 uppercase">Blitz</span>
+                            <span class="font-mono-code">3 min</span>
+                        </button>
+                        <button data-min="3" data-inc="2" data-label="3|2" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-amber-300/80 uppercase">Blitz</span>
+                            <span class="font-mono-code">3 | 2</span>
+                        </button>
+                        <button data-min="5" data-inc="0" data-label="5+0" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-amber-300/80 uppercase">Blitz</span>
+                            <span class="font-mono-code">5 min</span>
+                        </button>
+                        <button data-min="5" data-inc="3" data-label="5|3" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-amber-300/80 uppercase">Blitz</span>
+                            <span class="font-mono-code">5 | 3</span>
+                        </button>
+
+                        <button data-min="10" data-inc="0" data-label="10+0" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-amber-500/25 border border-amber-400/50 text-[10px] font-semibold text-amber-100 flex flex-col items-center">
+                            <span class="text-[9px] text-emerald-300/90 uppercase">Rapid</span>
+                            <span class="font-mono-code">10 min</span>
+                        </button>
+                        <button data-min="15" data-inc="10" data-label="15|10" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-emerald-300/80 uppercase">Rapid</span>
+                            <span class="font-mono-code">15 | 10</span>
+                        </button>
+                        <button data-min="30" data-inc="0" data-label="30+0" class="tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center">
+                            <span class="text-[9px] text-sky-300/80 uppercase">Classic</span>
+                            <span class="font-mono-code">30 min</span>
+                        </button>
+                        <button id="btn-toggle-custom-tc" class="md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-amber-200 flex flex-col items-center justify-center">
+                            <span class="material-symbols-outlined text-sm">more_time</span>
+                            <span class="text-[9px]">Custom</span>
+                        </button>
+                    </div>
+
+                    <!-- Custom Time Control Builder (Collapsible) -->
+                    <div id="custom-tc-panel" class="hidden pt-2 mt-1 border-t border-white/10 space-y-2">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-wider text-slate-400 mb-1">Minutes / Side (1-180)</label>
+                                <input id="input-custom-min" type="number" min="1" max="180" value="10" class="w-full px-2.5 py-1.5 rounded-lg bg-black/50 border border-white/15 font-mono-code text-xs text-amber-100 focus:outline-none focus:border-amber-400">
+                            </div>
+                            <div>
+                                <label class="block text-[9px] uppercase tracking-wider text-slate-400 mb-1">Increment Sec (0-60)</label>
+                                <input id="input-custom-inc" type="number" min="0" max="60" value="5" class="w-full px-2.5 py-1.5 rounded-lg bg-black/50 border border-white/15 font-mono-code text-xs text-amber-100 focus:outline-none focus:border-amber-400">
+                            </div>
+                        </div>
+                        <button id="btn-apply-custom-tc" class="md3-btn w-full py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs shadow">
+                            Apply Custom Timer
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SECTION 2: Game Mode & Online PvP Room -->
+            <div class="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-2.5">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Opponent & Multiplayer</span>
+                <div class="grid grid-cols-3 gap-1.5">
+                    <button id="btn-mode-ai" class="md3-btn py-2 px-2 rounded-xl bg-amber-500/25 border border-amber-400/50 text-amber-100 text-[11px] font-semibold flex flex-col items-center gap-1">
+                        <span class="material-symbols-outlined text-base">smart_toy</span>
+                        <span>Archmage AI</span>
+                    </button>
+                    <button id="btn-mode-2p" class="md3-btn py-2 px-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-[11px] font-semibold flex flex-col items-center gap-1">
+                        <span class="material-symbols-outlined text-base">group</span>
+                        <span>2P Pass Play</span>
+                    </button>
+                    <button id="btn-pvp-lobby" class="md3-btn py-2 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-200 text-[11px] font-semibold flex flex-col items-center gap-1">
+                        <span class="material-symbols-outlined text-base">sensors</span>
+                        <span id="pvp-btn-label">Online PvP</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SECTION 3: Camera & Cathedral Lighting Controls -->
+            <div class="p-3 rounded-2xl bg-white/5 border border-white/10 space-y-2.5">
+                <div class="flex items-center justify-between">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Camera & Framing</span>
+                    <button id="btn-autofit" class="md3-btn text-[11px] font-semibold text-amber-300 hover:underline flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">aspect_ratio</span>
+                        <span>Fit to Screen</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-1.5">
+                    <button data-cam="0" class="cam-preset-btn md3-btn py-1.5 px-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-xs text-slate-200 font-medium">White View</button>
+                    <button data-cam="1" class="cam-preset-btn md3-btn py-1.5 px-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-xs text-slate-200 font-medium">Black View</button>
+                    <button data-cam="2" class="cam-preset-btn md3-btn py-1.5 px-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-xs text-slate-200 font-medium">Side Arena</button>
+                    <button data-cam="3" class="cam-preset-btn md3-btn py-1.5 px-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-xs text-slate-200 font-medium">Overhead 2D/3D</button>
+                </div>
+
+                <div class="flex items-center justify-between pt-1">
+                    <button id="btn-autoflip" class="md3-btn flex-1 mr-1 py-1.5 px-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-[11px] text-slate-300 font-medium flex items-center justify-center gap-1">
+                        <span class="material-symbols-outlined text-sm">flip_camera_android</span>
+                        <span id="autoflip-label">Auto-Flip: Off</span>
+                    </button>
+                    <button id="btn-lighting" class="md3-btn flex-1 ml-1 py-1.5 px-2.5 rounded-xl bg-white/5 hover:bg-white/15 text-[11px] text-slate-300 font-medium flex items-center justify-center gap-1">
+                        <span class="material-symbols-outlined text-sm">wb_twilight</span>
+                        <span id="lighting-label">Torches: High</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- SECTION 4: Quick Actions (Undo, Audio, New Duel) -->
+            <div class="grid grid-cols-3 gap-2">
+                <button id="btn-undo" class="md3-btn py-2 px-3 rounded-xl bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium flex items-center justify-center gap-1">
+                    <span class="material-symbols-outlined text-base">undo</span>
+                    <span>Undo</span>
+                </button>
+                <button id="btn-sound" class="md3-btn py-2 px-3 rounded-xl bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium flex items-center justify-center gap-1">
+                    <span id="sound-icon" class="material-symbols-outlined text-base">volume_up</span>
+                    <span id="sound-label">Audio On</span>
+                </button>
+                <button id="btn-reset" class="md3-btn py-2 px-3 rounded-xl bg-rose-500/20 hover:bg-rose-500/35 text-rose-200 border border-rose-400/30 text-xs font-semibold flex items-center justify-center gap-1">
+                    <span class="material-symbols-outlined text-base">restart_alt</span>
+                    <span>Reset</span>
+                </button>
+            </div>
+
+            <!-- SECTION 5: Quick PvP Emotes -->
+            <div class="p-2.5 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-between">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 pl-1">Send Herald</span>
+                <div class="flex items-center gap-1">
+                    <button data-emote="🐘 War Elephant advances!" class="emote-btn md3-btn px-2 py-1 rounded-lg hover:bg-white/10 text-xs">🐘</button>
+                    <button data-emote="⚔️ Steel & stone!" class="emote-btn md3-btn px-2 py-1 rounded-lg hover:bg-white/10 text-xs">⚔️</button>
+                    <button data-emote="✨ Masterful move." class="emote-btn md3-btn px-2 py-1 rounded-lg hover:bg-white/10 text-xs">✨</button>
+                    <button data-emote="👑 Guard your Sovereign!" class="emote-btn md3-btn px-2 py-1 rounded-lg hover:bg-white/10 text-xs">👑</button>
+                    <button data-emote="🤝 Well fought." class="emote-btn md3-btn px-2 py-1 rounded-lg hover:bg-white/10 text-xs">🤝</button>
+                </div>
+            </div>
+
+            <!-- SECTION 6: Algebraic Move Chronicle & Sculpted Roster -->
+            <div class="p-3 rounded-2xl bg-white/5 border border-white/10 flex flex-col max-h-48">
+                <div class="flex items-center justify-between pb-1.5 mb-1.5 border-b border-white/10">
+                    <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400">Move Chronicle</span>
+                    <span id="move-counter" class="text-[10px] font-mono-code text-slate-400">0 ply</span>
+                </div>
+                <div id="move-list" class="flex-1 overflow-y-auto pr-1 space-y-1 text-xs font-mono-code text-slate-300">
+                    <div class="text-slate-500 italic text-center py-3 font-sans text-[11px]">No moves recorded yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Drawer Footer Status -->
+        <div class="pt-3 mt-4 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
+            <span id="anim-status" class="flex items-center gap-1.5 text-amber-300/90 truncate">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                Sanctum Ready
+            </span>
+            <span class="text-[10px] text-slate-500">Drag to Orbit • Pinch to Zoom</span>
+        </div>
+    </aside>
 
     <!-- LIVE PVP MULTIPLAYER ROOM MODAL -->
     <div id="pvp-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-md p-4">
@@ -1761,22 +1852,12 @@
         let screenShakeTime = 0;
 
         function triggerCombatHerald(title, subtitle = '', isWhiteAttacker = true) {
-            const layer = document.getElementById('combat-herald-layer');
+            // Subtle light flash only — zero center-screen text overlays to keep view 100% clean
             const flash = document.getElementById('impact-flash');
-            flash.style.opacity = '0.55';
-            setTimeout(() => { flash.style.opacity = '0'; }, 110);
-
-            const banner = document.createElement('div');
-            banner.className = `absolute left-1/2 top-1/4 gothic-banner-anim text-center pointer-events-none select-none`;
-            const titleColor = isWhiteAttacker ? 'text-amber-200' : 'text-rose-300';
-            banner.innerHTML = `
-                <div class="px-6 py-2.5 rounded-2xl bg-black/80 border border-amber-400/40 shadow-2xl backdrop-blur-md">
-                    <div class="font-gothic text-xl sm:text-3xl font-extrabold tracking-widest ${titleColor} drop-shadow">${title}</div>
-                    ${subtitle ? `<div class="text-[11px] font-sans font-semibold uppercase tracking-widest text-slate-300 mt-0.5">${subtitle}</div>` : ''}
-                </div>
-            `;
-            layer.appendChild(banner);
-            setTimeout(() => banner.remove(), 1400);
+            if (flash) {
+                flash.style.opacity = '0.35';
+                setTimeout(() => { flash.style.opacity = '0'; }, 110);
+            }
         }
 
         function spawnStoneDustPuff(worldPos, count = 8) {
@@ -1954,8 +2035,17 @@
         let pendingPromotionMove = null;
         let lastMoveSquares = null;
 
+        // Customizable Chess Match Timer State
+        let timeControl = {
+            minutes: 10,
+            increment: 0,
+            isUntimed: false,
+            label: '10+0'
+        };
         let clockWhite = 600;
         let clockBlack = 600;
+        let isClockPaused = false;
+        let timeoutWinner = null;
 
         // Online PvP State (Supports both PeerJS WebRTC & Firestore Cloud Sync)
         let db = null;
@@ -2052,12 +2142,22 @@
         }
 
         function executeMoveAnimated(moveObj, isRemoteSync = false) {
+            if (timeoutWinner) return;
             clearHighlights();
             selectedSquare = null;
             legalMovesForSelected = [];
 
             const result = chess.move(moveObj);
             if (!result) return;
+
+            // Apply Fischer Increment (+X seconds) to the player who just completed their move
+            if (!isRemoteSync && !timeControl.isUntimed && timeControl.increment > 0) {
+                if (result.color === 'w') {
+                    clockWhite += timeControl.increment;
+                } else {
+                    clockBlack += timeControl.increment;
+                }
+            }
 
             lastMoveSquares = { from: result.from, to: result.to };
             renderLastMoveBoxes();
@@ -2179,7 +2279,6 @@
             if (gameMode === 'local2p' && autoFlipCamera) {
                 const nextTurn = chess.turn();
                 camState.targetTheta = nextTurn === 'w' ? 0 : Math.PI;
-                document.getElementById('camera-label').textContent = nextTurn === 'w' ? 'White View' : 'Black View';
             }
 
             if (gameMode === 'ai' && chess.turn() === 'b') {
@@ -2327,6 +2426,9 @@
             if (!data || !data.type) return;
             if (data.type === 'welcome') {
                 document.getElementById('white-player-name').textContent = data.hostName || 'White Host';
+                if (data.timeControl) {
+                    applyTimeControlSettings(data.timeControl.minutes, data.timeControl.increment, false, true);
+                }
             } else if (data.type === 'joined') {
                 document.getElementById('black-player-name').textContent = data.guestName || 'Black Challenger';
                 document.getElementById('room-wait-status').innerHTML =
@@ -2336,12 +2438,23 @@
                 clockWhite = data.clockW ?? clockWhite;
                 clockBlack = data.clockB ?? clockBlack;
                 executeMoveAnimated(data.move, true);
+            } else if (data.type === 'timeControl') {
+                applyTimeControlSettings(data.minutes, data.increment, data.restartMatch, true);
+                showFloatingEmote(`⏱️ Timer set to ${timeControl.label}`);
+            } else if (data.type === 'pauseClock') {
+                isClockPaused = Boolean(data.isPaused);
+                updatePauseButtonUI();
+                updateHUD();
+                showFloatingEmote(isClockPaused ? "⏸️ Match Clock Paused" : "▶️ Match Clock Resumed");
             } else if (data.type === 'emote') {
                 showFloatingEmote(`${data.sender}: ${data.text}`);
             } else if (data.type === 'reset') {
                 chess.reset();
-                clockWhite = 600;
-                clockBlack = 600;
+                timeoutWinner = null;
+                isClockPaused = false;
+                updatePauseButtonUI();
+                clockWhite = timeControl.isUntimed ? 0 : timeControl.minutes * 60;
+                clockBlack = timeControl.isUntimed ? 0 : timeControl.minutes * 60;
                 lastMoveSquares = null;
                 syncBoardMeshesFull();
                 showFloatingEmote("🔄 Opponent initiated a Rematch!");
@@ -2359,8 +2472,11 @@
             gameMode = 'online';
 
             chess.reset();
-            clockWhite = 600;
-            clockBlack = 600;
+            timeoutWinner = null;
+            isClockPaused = false;
+            updatePauseButtonUI();
+            clockWhite = timeControl.isUntimed ? 0 : timeControl.minutes * 60;
+            clockBlack = timeControl.isUntimed ? 0 : timeControl.minutes * 60;
             lastMoveSquares = null;
             syncBoardMeshesFull();
 
@@ -2383,8 +2499,11 @@
                         guestUid: '',
                         guestName: 'Waiting...',
                         movesJson: JSON.stringify([]),
-                        clockW: 600,
-                        clockB: 600,
+                        clockW: clockWhite,
+                        clockB: clockBlack,
+                        tcMinutes: timeControl.minutes,
+                        tcIncrement: timeControl.increment,
+                        isPaused: false,
                         status: 'waiting',
                         emoteJson: '',
                         resetCounter: 0
@@ -2411,10 +2530,10 @@
             gameMode = 'online';
 
             chess.reset();
+            timeoutWinner = null;
             syncBoardMeshesFull();
 
             camState.targetTheta = Math.PI;
-            document.getElementById('camera-label').textContent = 'Black View';
             document.getElementById('active-room-box').classList.remove('hidden');
             document.getElementById('display-room-code').textContent = code;
             document.getElementById('pvp-btn-label').textContent = `Room: ${code}`;
@@ -2430,6 +2549,9 @@
                     if (snap.exists()) {
                         const data = snap.data();
                         myOnlineColor = data.hostUid === currentUser.uid ? 'w' : 'b';
+                        if (typeof data.tcMinutes === 'number') {
+                            applyTimeControlSettings(data.tcMinutes, data.tcIncrement || 0, false, true);
+                        }
                         if (myOnlineColor === 'b') {
                             await updateDoc(roomRef, {
                                 guestUid: currentUser.uid,
@@ -2461,11 +2583,25 @@
                     waitEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> Connected vs. <b>${data.guestName}</b>!`;
                 }
 
+                if (typeof data.tcMinutes === 'number' &&
+                    (data.tcMinutes !== timeControl.minutes || (data.tcIncrement || 0) !== timeControl.increment)) {
+                    applyTimeControlSettings(data.tcMinutes, data.tcIncrement || 0, false, true);
+                }
+
+                if (typeof data.isPaused === 'boolean' && data.isPaused !== isClockPaused) {
+                    isClockPaused = data.isPaused;
+                    updatePauseButtonUI();
+                    updateHUD();
+                }
+
                 if (data.resetCounter && data.resetCounter > lastResetCounter) {
                     lastResetCounter = data.resetCounter;
                     chess.reset();
-                    clockWhite = 600;
-                    clockBlack = 600;
+                    timeoutWinner = null;
+                    isClockPaused = false;
+                    updatePauseButtonUI();
+                    clockWhite = timeControl.isUntimed ? 0 : timeControl.minutes * 60;
+                    clockBlack = timeControl.isUntimed ? 0 : timeControl.minutes * 60;
                     lastMoveSquares = null;
                     syncBoardMeshesFull();
                     showFloatingEmote("🔄 Rematch started!");
@@ -2545,15 +2681,15 @@
         function showFloatingEmote(message) {
             const containerEl = document.getElementById('emote-container');
             const bubble = document.createElement('div');
-            bubble.className = 'md3-card emote-bubble px-4 py-2 rounded-full border border-amber-400/50 text-xs sm:text-sm font-bold text-amber-100 shadow-xl';
+            bubble.className = 'md3-card toast-item px-3 py-1.5 rounded-xl border border-amber-400/30 text-[11px] font-medium text-amber-100 shadow-lg';
             bubble.textContent = message;
             containerEl.appendChild(bubble);
             soundFX.playSelect();
-            setTimeout(() => bubble.remove(), 3200);
+            setTimeout(() => bubble.remove(), 2600);
         }
 
         /***********************************************************************
-         * 10. CAMERA CONTROLS (ORBIT, ZOOM & PRESETS)
+         * 10. RESPONSIVE CAMERA FRAMING, MULTI-TOUCH PINCH & ORBIT CONTROLS
          ***********************************************************************/
         const cameraPresets = [
             { name: 'White View', theta: 0, phi: 0.88, radius: 12.6 },
@@ -2570,16 +2706,50 @@
             targetTheta: 0,
             targetPhi: 0.88,
             targetRadius: 12.6,
+            baseRadiusForPreset: 12.6,
             isDragging: false,
             dragDistance: 0,
             prevX: 0,
             prevY: 0
         };
 
+        // Calculates optimal FOV and camera distance so the 8x8 board + borders fit any screen aspect ratio
+        function applyResponsiveCameraFraming(resetZoomToFit = false) {
+            const w = window.innerWidth || 1;
+            const h = window.innerHeight || 1;
+            const aspect = w / h;
+
+            camera.aspect = aspect;
+
+            // Widen vertical FOV on narrow portrait screens, keep crisp perspective on ultrawide
+            if (aspect < 1.0) {
+                camera.fov = Math.min(58, Math.max(40, 39 / Math.pow(aspect, 0.35)));
+            } else {
+                camera.fov = 38;
+            }
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+
+            // Board outer width with coordinate frame is ~10.6 world units
+            const boardSpan = 10.8;
+            const vFovRad = THREE.MathUtils.degToRad(camera.fov);
+            const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * aspect);
+            const limitingFov = Math.min(vFovRad, hFovRad);
+
+            const idealFitRadius = (boardSpan * 0.54) / Math.tan(limitingFov / 2);
+            const clampedFitRadius = Math.max(11.4, Math.min(25.0, idealFitRadius));
+
+            if (resetZoomToFit) {
+                camState.targetRadius = clampedFitRadius;
+            } else {
+                camState.targetRadius = Math.max(camState.targetRadius, clampedFitRadius * 0.92);
+            }
+        }
+
         function updateCameraTransform() {
-            camState.theta += (camState.targetTheta - camState.theta) * 0.1;
-            camState.phi += (camState.targetPhi - camState.phi) * 0.1;
-            camState.radius += (camState.targetRadius - camState.radius) * 0.1;
+            camState.theta += (camState.targetTheta - camState.theta) * 0.12;
+            camState.phi += (camState.targetPhi - camState.phi) * 0.12;
+            camState.radius += (camState.targetRadius - camState.radius) * 0.12;
 
             const x = camState.radius * Math.sin(camState.phi) * Math.sin(camState.theta);
             const y = camState.radius * Math.cos(camState.phi);
@@ -2587,30 +2757,54 @@
 
             let shakeX = 0, shakeY = 0;
             if (screenShakeTime > 0) {
-                shakeX = (Math.random() - 0.5) * 0.32;
-                shakeY = (Math.random() - 0.5) * 0.32;
+                shakeX = (Math.random() - 0.5) * 0.26;
+                shakeY = (Math.random() - 0.5) * 0.26;
             }
 
             camera.position.set(x + shakeX, y + shakeY, z);
-            camera.lookAt(0, 0.38, 0);
+            camera.lookAt(0, 0.28, 0);
         }
 
         /***********************************************************************
-         * 11. RAYCASTING & POINTER INTERACTION
+         * 11. RAYCASTING, POINTER & MULTI-TOUCH PINCH INTERACTION
          ***********************************************************************/
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
+        const activePointers = new Map();
+        let initialPinchDistance = null;
+        let initialPinchRadius = null;
 
         renderer.domElement.addEventListener('pointerdown', (e) => {
             soundFX.init();
-            camState.isDragging = true;
-            camState.dragDistance = 0;
-            camState.prevX = e.clientX;
-            camState.prevY = e.clientY;
+            activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+            if (activePointers.size === 1) {
+                camState.isDragging = true;
+                camState.dragDistance = 0;
+                camState.prevX = e.clientX;
+                camState.prevY = e.clientY;
+            } else if (activePointers.size === 2) {
+                camState.isDragging = false;
+                const pts = Array.from(activePointers.values());
+                initialPinchDistance = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                initialPinchRadius = camState.targetRadius;
+            }
         });
 
         window.addEventListener('pointermove', (e) => {
-            if (!camState.isDragging) return;
+            if (activePointers.has(e.pointerId)) {
+                activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+            }
+
+            if (activePointers.size === 2 && initialPinchDistance > 10) {
+                const pts = Array.from(activePointers.values());
+                const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+                const scale = initialPinchDistance / Math.max(20, dist);
+                camState.targetRadius = Math.max(6.8, Math.min(26, initialPinchRadius * scale));
+                return;
+            }
+
+            if (!camState.isDragging || activePointers.size > 1) return;
             const dx = e.clientX - camState.prevX;
             const dy = e.clientY - camState.prevY;
             camState.dragDistance += Math.hypot(dx, dy);
@@ -2618,24 +2812,31 @@
             camState.prevY = e.clientY;
 
             camState.targetTheta -= dx * 0.0075;
-            camState.targetPhi = Math.max(0.22, Math.min(1.42, camState.targetPhi - dy * 0.0065));
+            camState.targetPhi = Math.max(0.20, Math.min(1.42, camState.targetPhi - dy * 0.0065));
         });
 
-        window.addEventListener('pointerup', (e) => {
+        function handlePointerEnd(e) {
+            activePointers.delete(e.pointerId);
+            if (activePointers.size < 2) {
+                initialPinchDistance = null;
+            }
             if (!camState.isDragging) return;
             camState.isDragging = false;
-            if (camState.dragDistance < 8) {
+            if (camState.dragDistance < 10) {
                 handleBoardClick(e);
             }
-        });
+        }
+
+        window.addEventListener('pointerup', handlePointerEnd);
+        window.addEventListener('pointercancel', handlePointerEnd);
 
         renderer.domElement.addEventListener('wheel', (e) => {
             e.preventDefault();
-            camState.targetRadius = Math.max(6.8, Math.min(22, camState.targetRadius + e.deltaY * 0.008));
+            camState.targetRadius = Math.max(6.8, Math.min(26, camState.targetRadius + e.deltaY * 0.008));
         }, { passive: false });
 
         function handleBoardClick(e) {
-            if (currentAnimation || chess.game_over()) return;
+            if (currentAnimation || chess.game_over() || timeoutWinner) return;
             if (gameMode === 'ai' && chess.turn() === 'b') return;
             if (gameMode === 'online' && chess.turn() !== myOnlineColor) {
                 showFloatingEmote(`⏳ Waiting for ${myOnlineColor === 'w' ? 'Black' : 'White'}'s move...`);
@@ -2707,51 +2908,170 @@
         });
 
         /***********************************************************************
-         * 12. HUD UPDATES, DUAL CHESS CLOCKS & NAVIGATION CONTROLS
+         * 12. HUD UPDATES, DUAL CHESS CLOCKS, TIME CONTROLS & NAVIGATION
          ***********************************************************************/
         function formatClock(sec) {
+            if (timeControl.isUntimed) return '∞';
             const s = Math.max(0, Math.floor(sec));
             const m = Math.floor(s / 60);
             const rem = s % 60;
             return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
         }
 
+        function applyTimeControlSettings(minutes, increment, shouldResetClocks = true, isRemoteSync = false) {
+            const mins = Math.max(0, Math.min(180, parseInt(minutes, 10) || 0));
+            const inc = Math.max(0, Math.min(60, parseInt(increment, 10) || 0));
+
+            timeControl.minutes = mins;
+            timeControl.increment = inc;
+            timeControl.isUntimed = mins === 0;
+            timeControl.label = mins === 0 ? '∞' : (inc > 0 ? `${mins}|${inc}` : `${mins}+0`);
+
+            if (shouldResetClocks) {
+                clockWhite = timeControl.isUntimed ? 0 : mins * 60;
+                clockBlack = timeControl.isUntimed ? 0 : mins * 60;
+                timeoutWinner = null;
+                isClockPaused = false;
+                updatePauseButtonUI();
+            }
+
+            // Highlight matching preset button
+            document.querySelectorAll('.tc-preset-btn').forEach(btn => {
+                const bMin = parseInt(btn.getAttribute('data-min'), 10);
+                const bInc = parseInt(btn.getAttribute('data-inc'), 10);
+                if (bMin === mins && bInc === inc) {
+                    btn.className = "tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-amber-500/25 border border-amber-400/50 text-[10px] font-semibold text-amber-100 flex flex-col items-center";
+                } else {
+                    btn.className = "tc-preset-btn md3-btn py-1.5 px-1 rounded-lg bg-white/5 hover:bg-white/15 border border-white/10 text-[10px] font-semibold text-slate-300 flex flex-col items-center";
+                }
+            });
+
+            document.getElementById('active-tc-badge').textContent = timeControl.label;
+            updateHUD();
+
+            if (gameMode === 'online' && !isRemoteSync && activeRoomId) {
+                if (peerConn && peerConn.open) {
+                    peerConn.send({
+                        type: 'timeControl',
+                        minutes: mins,
+                        increment: inc,
+                        restartMatch: shouldResetClocks
+                    });
+                }
+                if (db && currentUser) {
+                    try {
+                        updateDoc(getRoomDocRef(activeRoomId), {
+                            tcMinutes: mins,
+                            tcIncrement: inc,
+                            clockW: clockWhite,
+                            clockB: clockBlack
+                        });
+                    } catch (e) {}
+                }
+            }
+        }
+
+        function updatePauseButtonUI() {
+            const iconEl = document.getElementById('pause-clock-icon');
+            const labelEl = document.getElementById('pause-clock-label');
+            const pauseBadge = document.getElementById('hud-pause-badge');
+            if (isClockPaused) {
+                iconEl.textContent = 'play_arrow';
+                labelEl.textContent = 'Resume';
+                pauseBadge.classList.remove('hidden');
+            } else {
+                iconEl.textContent = 'pause';
+                labelEl.textContent = 'Pause Clock';
+                pauseBadge.classList.add('hidden');
+            }
+        }
+
         setInterval(() => {
-            if (chess.game_over() || currentAnimation || chess.history().length === 0) return;
+            if (timeControl.isUntimed || isClockPaused || timeoutWinner || chess.game_over() || currentAnimation || chess.history().length === 0) {
+                return;
+            }
             if (chess.turn() === 'w') {
                 clockWhite = Math.max(0, clockWhite - 1);
+                if (clockWhite === 0) {
+                    timeoutWinner = 'b';
+                    soundFX.playCheck();
+                    updateHUD();
+                    showGameOverModal();
+                    return;
+                }
             } else {
                 clockBlack = Math.max(0, clockBlack - 1);
+                if (clockBlack === 0) {
+                    timeoutWinner = 'w';
+                    soundFX.playCheck();
+                    updateHUD();
+                    showGameOverModal();
+                    return;
+                }
             }
-            document.getElementById('clock-w').textContent = formatClock(clockWhite);
-            document.getElementById('clock-b').textContent = formatClock(clockBlack);
+            updateClockDisplaysOnly();
         }, 1000);
+
+        function updateClockDisplaysOnly() {
+            const wStr = formatClock(clockWhite);
+            const bStr = formatClock(clockBlack);
+            document.getElementById('clock-w').textContent = wStr;
+            document.getElementById('clock-b').textContent = bStr;
+
+            const hudClock = document.getElementById('hud-active-clock');
+            const hudDivider = document.getElementById('hud-clock-divider');
+            const turnPill = document.getElementById('minimal-turn-pill');
+
+            if (timeControl.isUntimed) {
+                hudClock.classList.add('hidden');
+                hudDivider.classList.add('hidden');
+                turnPill.className = "md3-card rounded-full px-3 py-1.5 flex items-center gap-2 border border-white/10 shadow-lg transition-colors duration-300";
+            } else {
+                hudClock.classList.remove('hidden');
+                hudDivider.classList.remove('hidden');
+                const activeSec = chess.turn() === 'w' ? clockWhite : clockBlack;
+                hudClock.textContent = formatClock(activeSec);
+
+                if (activeSec <= 30 && !isClockPaused) {
+                    hudClock.className = "font-mono-code text-[11px] font-extrabold text-rose-300 tracking-tight animate-pulse";
+                    turnPill.className = "md3-card rounded-full px-3 py-1.5 flex items-center gap-2 border border-rose-500/60 shadow-[0_0_15px_rgba(244,63,94,0.35)] transition-colors duration-300";
+                } else {
+                    hudClock.className = "font-mono-code text-[11px] font-bold text-amber-200 tracking-tight";
+                    turnPill.className = "md3-card rounded-full px-3 py-1.5 flex items-center gap-2 border border-white/10 shadow-lg transition-colors duration-300";
+                }
+            }
+        }
 
         function updateHUD() {
             const turn = chess.turn();
             const turnText = document.getElementById('turn-text');
+            const turnDot = document.getElementById('turn-dot');
             const statusBadge = document.getElementById('status-badge');
             const wPill = document.getElementById('white-clock-pill');
             const bPill = document.getElementById('black-clock-pill');
 
-            document.getElementById('clock-w').textContent = formatClock(clockWhite);
-            document.getElementById('clock-b').textContent = formatClock(clockBlack);
+            updateClockDisplaysOnly();
 
             if (turn === 'w') {
-                turnText.textContent = "White's Turn";
-                turnText.className = "text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-200";
-                wPill.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/25 border border-amber-400/60 turn-glow transition-all";
-                bPill.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 opacity-75 transition-all";
+                turnText.textContent = "White";
+                turnText.className = "text-[11px] font-semibold tracking-wider uppercase text-amber-100";
+                turnDot.className = "w-2 h-2 rounded-full bg-amber-100 shadow-[0_0_6px_#fef3c7]";
+                wPill.className = "p-2.5 rounded-xl bg-amber-500/20 border border-amber-400/50 flex flex-col justify-between transition-all";
+                bPill.className = "p-2.5 rounded-xl bg-white/5 border border-white/10 opacity-70 flex flex-col justify-between transition-all";
             } else {
-                turnText.textContent = gameMode === 'ai' ? "Archmage Thinking..." : "Black's Turn";
-                turnText.className = "text-[10px] sm:text-xs font-bold uppercase tracking-wider text-rose-300";
-                bPill.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/25 border border-rose-400/60 turn-glow transition-all";
-                wPill.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 opacity-75 transition-all";
+                turnText.textContent = gameMode === 'ai' ? "AI Turn" : "Black";
+                turnText.className = "text-[11px] font-semibold tracking-wider uppercase text-rose-200";
+                turnDot.className = "w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_6px_#f43f5e]";
+                bPill.className = "p-2.5 rounded-xl bg-rose-500/20 border border-rose-400/50 flex flex-col justify-between transition-all";
+                wPill.className = "p-2.5 rounded-xl bg-white/5 border border-white/10 opacity-70 flex flex-col justify-between transition-all";
             }
 
-            if (chess.in_check()) {
+            if (timeoutWinner) {
                 statusBadge.classList.remove('hidden');
-                statusBadge.textContent = chess.in_checkmate() ? 'CHECKMATE' : 'CHECK';
+                statusBadge.textContent = 'TIME';
+            } else if (chess.in_check()) {
+                statusBadge.classList.remove('hidden');
+                statusBadge.textContent = chess.in_checkmate() ? 'MATE' : 'CHECK';
             } else {
                 statusBadge.classList.add('hidden');
             }
@@ -2761,7 +3081,7 @@
             const moveListEl = document.getElementById('move-list');
 
             if (history.length === 0) {
-                moveListEl.innerHTML = `<div class="text-slate-400 italic text-center py-4 font-sans text-[11px]">Select any sculpted piece to illuminate legal square boxes & targets.</div>`;
+                moveListEl.innerHTML = `<div class="text-slate-500 italic text-center py-3 font-sans text-[11px]">No moves recorded yet.</div>`;
             } else {
                 let html = '';
                 for (let i = 0; i < history.length; i += 2) {
@@ -2806,7 +3126,11 @@
             const title = document.getElementById('gameover-title');
             const sub = document.getElementById('gameover-subtitle');
 
-            if (chess.in_checkmate()) {
+            if (timeoutWinner) {
+                const winner = timeoutWinner === 'w' ? 'White Marble' : 'Black Obsidian';
+                title.textContent = 'Victory on Time';
+                sub.textContent = `${winner} prevails as the opponent's hourglass runs out!`;
+            } else if (chess.in_checkmate()) {
                 const winner = chess.turn() === 'w' ? 'Black Obsidian' : 'White Marble';
                 title.textContent = 'Checkmate in the Sanctum';
                 sub.textContent = `${winner} shatters the opposing monarch's defense!`;
@@ -2819,8 +3143,87 @@
             modal.classList.add('flex');
         }
 
+        // TIME CONTROL PRESET & CUSTOM BUILDER LISTENERS
+        document.querySelectorAll('.tc-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                soundFX.init();
+                const mins = parseInt(btn.getAttribute('data-min'), 10);
+                const inc = parseInt(btn.getAttribute('data-inc'), 10);
+                applyTimeControlSettings(mins, inc, true, false);
+                showFloatingEmote(`⏱️ Time Control: ${timeControl.label}`);
+            });
+        });
+
+        document.getElementById('btn-toggle-custom-tc').addEventListener('click', () => {
+            soundFX.init();
+            const panel = document.getElementById('custom-tc-panel');
+            panel.classList.toggle('hidden');
+        });
+
+        document.getElementById('btn-apply-custom-tc').addEventListener('click', () => {
+            soundFX.init();
+            const mins = parseInt(document.getElementById('input-custom-min').value, 10) || 10;
+            const inc = parseInt(document.getElementById('input-custom-inc').value, 10) || 0;
+            applyTimeControlSettings(mins, inc, true, false);
+            document.getElementById('custom-tc-panel').classList.add('hidden');
+            showFloatingEmote(`⏱️ Custom Timer Set: ${timeControl.label}`);
+        });
+
+        document.getElementById('btn-pause-clock').addEventListener('click', () => {
+            soundFX.init();
+            if (timeControl.isUntimed) {
+                showFloatingEmote("∞ Match is currently Untimed");
+                return;
+            }
+            isClockPaused = !isClockPaused;
+            updatePauseButtonUI();
+            updateHUD();
+            showFloatingEmote(isClockPaused ? "⏸️ Match Clock Paused" : "▶️ Match Clock Resumed");
+
+            if (gameMode === 'online' && activeRoomId) {
+                if (peerConn && peerConn.open) {
+                    peerConn.send({ type: 'pauseClock', isPaused: isClockPaused });
+                }
+                if (db && currentUser) {
+                    try {
+                        updateDoc(getRoomDocRef(activeRoomId), { isPaused: isClockPaused });
+                    } catch (e) {}
+                }
+            }
+        });
+
+        // OPTIONS DRAWER TOGGLE LOGIC
+        const optionsDrawer = document.getElementById('options-drawer');
+        const optionsBackdrop = document.getElementById('options-backdrop');
+
+        function openOptionsDrawer() {
+            soundFX.init();
+            optionsBackdrop.classList.remove('hidden');
+            optionsDrawer.classList.remove('translate-x-full');
+        }
+
+        function closeOptionsDrawer() {
+            optionsDrawer.classList.add('translate-x-full');
+            optionsBackdrop.classList.add('hidden');
+        }
+
+        document.getElementById('btn-open-options').addEventListener('click', openOptionsDrawer);
+        document.getElementById('btn-close-options').addEventListener('click', closeOptionsDrawer);
+        optionsBackdrop.addEventListener('click', closeOptionsDrawer);
+
+        document.getElementById('btn-quick-fit').addEventListener('click', () => {
+            soundFX.init();
+            applyResponsiveCameraFraming(true);
+        });
+
+        document.getElementById('btn-autofit').addEventListener('click', () => {
+            applyResponsiveCameraFraming(true);
+            closeOptionsDrawer();
+        });
+
         document.getElementById('btn-pvp-lobby').addEventListener('click', () => {
             soundFX.init();
+            closeOptionsDrawer();
             document.getElementById('pvp-modal').classList.remove('hidden');
             document.getElementById('pvp-modal').classList.add('flex');
         });
@@ -2855,31 +3258,40 @@
             copyTextToClipboard(url, document.getElementById('copy-link-text'), 'Invite Link');
         });
 
+        function highlightActiveModeButtons() {
+            const aiBtn = document.getElementById('btn-mode-ai');
+            const p2Btn = document.getElementById('btn-mode-2p');
+            if (gameMode === 'ai') {
+                aiBtn.className = "md3-btn py-2 px-2 rounded-xl bg-amber-500/25 border border-amber-400/50 text-amber-100 text-[11px] font-semibold flex flex-col items-center gap-1";
+                p2Btn.className = "md3-btn py-2 px-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-[11px] font-semibold flex flex-col items-center gap-1";
+            } else if (gameMode === 'local2p') {
+                p2Btn.className = "md3-btn py-2 px-2 rounded-xl bg-amber-500/25 border border-amber-400/50 text-amber-100 text-[11px] font-semibold flex flex-col items-center gap-1";
+                aiBtn.className = "md3-btn py-2 px-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 text-[11px] font-semibold flex flex-col items-center gap-1";
+            }
+        }
+
         function activateLocal2PMode() {
             gameMode = 'local2p';
             autoFlipCamera = true;
-            document.getElementById('mode-label').textContent = 'Mode: 2P Local';
-            document.getElementById('mode-icon').textContent = 'group';
-            document.getElementById('online-badge').textContent = '2P Pass & Play';
+            document.getElementById('online-badge').textContent = 'Mode: 2P Pass & Play';
             document.getElementById('autoflip-label').textContent = 'Auto-Flip: On';
             document.getElementById('pvp-modal').classList.add('hidden');
             document.getElementById('pvp-modal').classList.remove('flex');
-            showFloatingEmote("⚔️ Local 2P Pass & Play Activated! Camera auto-rotates each turn.");
+            highlightActiveModeButtons();
+            closeOptionsDrawer();
+            showFloatingEmote("⚔️ 2P Pass & Play Active");
         }
 
         document.getElementById('btn-start-local-2p').addEventListener('click', activateLocal2PMode);
+        document.getElementById('btn-mode-2p').addEventListener('click', activateLocal2PMode);
 
-        document.getElementById('btn-mode').addEventListener('click', () => {
-            if (gameMode === 'ai') {
-                activateLocal2PMode();
-            } else {
-                gameMode = 'ai';
-                document.getElementById('mode-label').textContent = 'Mode: vs. AI';
-                document.getElementById('mode-icon').textContent = 'smart_toy';
-                document.getElementById('online-badge').textContent = 'vs. Archmage AI';
-                if (chess.turn() === 'b' && !chess.game_over()) {
-                    makeArchmageAIMove();
-                }
+        document.getElementById('btn-mode-ai').addEventListener('click', () => {
+            gameMode = 'ai';
+            document.getElementById('online-badge').textContent = 'Mode: vs. Archmage AI';
+            highlightActiveModeButtons();
+            closeOptionsDrawer();
+            if (chess.turn() === 'b' && !chess.game_over()) {
+                makeArchmageAIMove();
             }
         });
 
@@ -2888,13 +3300,23 @@
             document.getElementById('autoflip-label').textContent = autoFlipCamera ? 'Auto-Flip: On' : 'Auto-Flip: Off';
         });
 
-        document.getElementById('btn-camera').addEventListener('click', () => {
-            presetIndex = (presetIndex + 1) % cameraPresets.length;
-            const p = cameraPresets[presetIndex];
-            camState.targetTheta = p.theta;
-            camState.targetPhi = p.phi;
-            camState.targetRadius = p.radius;
-            document.getElementById('camera-label').textContent = p.name;
+        let highLighting = true;
+        document.getElementById('btn-lighting').addEventListener('click', () => {
+            highLighting = !highLighting;
+            ambientLight.intensity = highLighting ? 0.95 : 0.45;
+            moonLight.intensity = highLighting ? 1.55 : 0.9;
+            document.getElementById('lighting-label').textContent = highLighting ? 'Torches: High' : 'Torches: Dim';
+        });
+
+        document.querySelectorAll('.cam-preset-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                presetIndex = parseInt(btn.getAttribute('data-cam'), 10);
+                const p = cameraPresets[presetIndex];
+                camState.targetTheta = p.theta;
+                camState.targetPhi = p.phi;
+                applyResponsiveCameraFraming(true);
+                closeOptionsDrawer();
+            });
         });
 
         document.getElementById('btn-undo').addEventListener('click', () => {
@@ -2907,33 +3329,36 @@
             }
             lastMoveSquares = null;
             syncBoardMeshesFull();
-        });
-
-        document.getElementById('btn-history').addEventListener('click', () => {
-            document.getElementById('history-panel').classList.toggle('hidden');
+            closeOptionsDrawer();
         });
 
         document.getElementById('btn-sound').addEventListener('click', () => {
             soundFX.enabled = !soundFX.enabled;
             document.getElementById('sound-icon').textContent = soundFX.enabled ? 'volume_up' : 'volume_off';
+            document.getElementById('sound-label').textContent = soundFX.enabled ? 'Audio On' : 'Muted';
         });
 
         document.querySelectorAll('.emote-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 soundFX.init();
                 sendEmote(btn.getAttribute('data-emote'));
+                closeOptionsDrawer();
             });
         });
 
         async function resetGame() {
             currentAnimation = null;
             chess.reset();
-            clockWhite = 600;
-            clockBlack = 600;
+            timeoutWinner = null;
+            isClockPaused = false;
+            updatePauseButtonUI();
+            clockWhite = timeControl.isUntimed ? 0 : timeControl.minutes * 60;
+            clockBlack = timeControl.isUntimed ? 0 : timeControl.minutes * 60;
             lastMoveSquares = null;
             syncBoardMeshesFull();
             document.getElementById('gameover-modal').classList.add('hidden');
             document.getElementById('gameover-modal').classList.remove('flex');
+            closeOptionsDrawer();
 
             if (gameMode === 'online' && activeRoomId) {
                 if (peerConn && peerConn.open) {
@@ -2944,8 +3369,9 @@
                     try {
                         await updateDoc(getRoomDocRef(activeRoomId), {
                             movesJson: JSON.stringify([]),
-                            clockW: 600,
-                            clockB: 600,
+                            clockW: clockWhite,
+                            clockB: clockBlack,
+                            isPaused: false,
                             resetCounter: lastResetCounter
                         });
                     } catch (e) {}
@@ -2960,10 +3386,9 @@
             document.getElementById('gameover-modal').classList.remove('flex');
         });
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        window.addEventListener('resize', () => applyResponsiveCameraFraming(false));
+        window.addEventListener('orientationchange', () => {
+            setTimeout(() => applyResponsiveCameraFraming(true), 150);
         });
 
         /***********************************************************************
@@ -3190,6 +3615,7 @@
         }
 
         window.onload = function () {
+            applyResponsiveCameraFraming(true);
             syncBoardMeshesFull();
             initOnlinePvP();
             animate();
