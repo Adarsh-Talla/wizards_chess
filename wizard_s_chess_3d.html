@@ -1,0 +1,3199 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Wizard's Chess 3D — Gothic Sanctum & Realistic Sculpted Guardians</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Cinzel for Gothic flavor, Inter & JetBrains Mono for Material UI -->
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800;900&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+    <!-- Material Symbols Outlined -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
+    <!-- Three.js r128 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- Chess.js for complete rules validation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <!-- Tone.js for procedural Wizard Chess sound effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- PeerJS for Serverless WebRTC P2P Room Code Sync alongside Cloud Sync -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+
+    <style>
+        :root {
+            --md-surface: rgba(16, 17, 24, 0.84);
+            --md-border: rgba(212, 175, 55, 0.22);
+        }
+        * {
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #07080d;
+            font-family: 'Inter', sans-serif;
+        }
+        .font-gothic {
+            font-family: 'Cinzel', serif;
+        }
+        .font-mono-code {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        #canvas-container {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            outline: none;
+        }
+        /* Material Design 3 Glassmorphic Surface */
+        .md3-card {
+            background: var(--md-surface);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border: 1px solid var(--md-border);
+            box-shadow: 0 14px 38px -6px rgba(0, 0, 0, 0.78);
+        }
+        .md3-btn {
+            transition: all 0.2s cubic-bezier(0.2, 0, 0, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        .md3-btn:active {
+            transform: scale(0.95);
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 5px;
+            height: 5px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 16, 22, 0.4);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(212, 175, 55, 0.45);
+            border-radius: 9999px;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { box-shadow: 0 0 12px rgba(245, 158, 11, 0.35); }
+            50% { box-shadow: 0 0 24px rgba(245, 158, 11, 0.85); }
+        }
+        .turn-glow {
+            animation: pulse-glow 2.2s infinite ease-in-out;
+        }
+        @keyframes gothic-banner-pop {
+            0% { transform: translate(-50%, -50%) scale(0.82); opacity: 0; filter: blur(6px); }
+            20% { transform: translate(-50%, -50%) scale(1.04); opacity: 1; filter: blur(0px); }
+            80% { transform: translate(-50%, -58%) scale(1.0); opacity: 1; }
+            100% { transform: translate(-50%, -75%) scale(0.94); opacity: 0; }
+        }
+        .gothic-banner-anim {
+            animation: gothic-banner-pop 1.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes emote-float {
+            0% { transform: translateY(12px) scale(0.8); opacity: 0; }
+            15% { transform: translateY(0px) scale(1.05); opacity: 1; }
+            85% { transform: translateY(-6px) scale(1); opacity: 1; }
+            100% { transform: translateY(-20px) scale(0.9); opacity: 0; }
+        }
+        .emote-bubble {
+            animation: emote-float 3.2s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="text-slate-100 antialiased">
+
+    <!-- 3D WebGL Viewport -->
+    <div id="canvas-container"></div>
+
+    <!-- IMPACT FLASH & GOTHIC COMBAT HERALDRY OVERLAY -->
+    <div id="impact-flash" class="fixed inset-0 z-20 pointer-events-none opacity-0 transition-opacity duration-100 bg-amber-100/40 mix-blend-overlay"></div>
+    <div id="combat-herald-layer" class="fixed inset-0 z-30 pointer-events-none overflow-hidden"></div>
+
+    <!-- FLOATING EMOTE CHAT BUBBLES -->
+    <div id="emote-container" class="fixed top-20 left-1/2 -translate-x-1/2 z-40 pointer-events-none flex flex-col items-center gap-2"></div>
+
+    <!-- Single-Level Material Design 3 HUD Overlay -->
+    <div class="relative z-10 pointer-events-none w-full h-full flex flex-col justify-between p-2.5 sm:p-4">
+
+        <!-- TOP BAR: Dual Player Clocks, Turn Status & Online PvP Badge -->
+        <header class="w-full flex flex-wrap items-center justify-between gap-2">
+            <!-- Brand & Live PvP Status -->
+            <div class="md3-card pointer-events-auto rounded-2xl px-3.5 py-2 flex items-center gap-2.5">
+                <div class="w-9 h-9 rounded-xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300 shadow-inner">
+                    <span class="material-symbols-outlined text-xl">castle</span>
+                </div>
+                <div>
+                    <div class="flex items-center gap-2">
+                        <h1 class="font-gothic text-xs sm:text-sm font-bold tracking-wider text-amber-100">WIZARD'S CHESS</h1>
+                        <span id="online-badge" class="text-[10px] font-sans font-semibold uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">vs. Archmage AI</span>
+                    </div>
+                    <p id="sub-status" class="text-[10px] text-slate-400 hidden sm:block">Carrara Marble & Gold vs. Volcanic Obsidian</p>
+                </div>
+            </div>
+
+            <!-- Center Dual Player Clocks & Turn Indicator -->
+            <div class="md3-card pointer-events-auto rounded-full px-2.5 py-1.5 flex items-center gap-2 sm:gap-3 border-amber-500/30">
+                <!-- White Player Pill + Clock -->
+                <div id="white-clock-pill" class="flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/25 border border-amber-400/50 transition-all">
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-100 shadow-[0_0_8px_#fef3c7]"></span>
+                    <div class="flex flex-col">
+                        <span id="white-player-name" class="text-[10px] font-bold uppercase tracking-wider text-amber-100 leading-none">White Marble</span>
+                        <span id="captured-black" class="text-[10px] text-amber-300/90 leading-tight min-h-[12px]"></span>
+                    </div>
+                    <span id="clock-w" class="font-mono-code text-xs sm:text-sm font-bold text-amber-50 bg-black/40 px-2 py-0.5 rounded-md">10:00</span>
+                </div>
+
+                <!-- VS / Turn Status Badge -->
+                <div class="flex flex-col items-center px-1">
+                    <span id="turn-text" class="text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-200">White Turn</span>
+                    <span id="status-badge" class="hidden text-[9px] font-extrabold uppercase px-2 py-0.2 rounded-full bg-rose-500/40 text-rose-200 border border-rose-400/50">CHECK</span>
+                </div>
+
+                <!-- Black Player Pill + Clock -->
+                <div id="black-clock-pill" class="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 transition-all">
+                    <span id="clock-b" class="font-mono-code text-xs sm:text-sm font-bold text-rose-200 bg-black/40 px-2 py-0.5 rounded-md">10:00</span>
+                    <div class="flex flex-col text-right">
+                        <span id="black-player-name" class="text-[10px] font-bold uppercase tracking-wider text-rose-200 leading-none">Black Obsidian</span>
+                        <span id="captured-white" class="text-[10px] text-rose-300/90 leading-tight min-h-[12px]"></span>
+                    </div>
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-600 shadow-[0_0_8px_#f43f5e]"></span>
+                </div>
+            </div>
+
+            <!-- Quick Emote Bar -->
+            <div class="md3-card pointer-events-auto rounded-2xl px-2.5 py-1.5 flex items-center gap-1">
+                <button data-emote="🐘 The Imperial War Elephant advances!" class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="War Elephant Herald">🐘</button>
+                <button data-emote="⚔️ Steel and stone shall shatter you!" class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="Battle Challenge">⚔️</button>
+                <button data-emote="✨ Masterful tactical maneuver." class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="Compliment Move">✨</button>
+                <button data-emote="👑 Guard your Sovereign!" class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="Royal Warning">👑</button>
+                <button data-emote="🤝 Well fought, noble adversary." class="emote-btn md3-btn px-2 py-1 rounded-xl hover:bg-white/10 text-xs" title="Well Fought">🤝</button>
+            </div>
+        </header>
+
+        <!-- MIDDLE AREA: Collapsible Move Log & Sculpted Piece Roster on Right -->
+        <div class="flex-1 flex items-center justify-end my-2 overflow-hidden">
+            <aside id="history-panel" class="md3-card pointer-events-auto w-64 sm:w-72 max-h-[56vh] rounded-3xl p-3.5 flex flex-col transition-all duration-300">
+                <div class="flex items-center justify-between pb-2 mb-2 border-b border-white/10">
+                    <div class="flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-amber-300 text-base">history_edu</span>
+                        <h2 class="text-[11px] font-bold uppercase tracking-wider text-slate-200">Sanctum Chronicle</h2>
+                    </div>
+                    <span id="move-counter" class="text-[10px] font-mono-code px-2 py-0.5 rounded-md bg-white/5 text-slate-400">0 ply</span>
+                </div>
+
+                <!-- Sculpted Guardian Roster Reference -->
+                <div class="grid grid-cols-2 gap-1 mb-2 pb-2 border-b border-white/10 text-[10px] text-slate-300">
+                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Rook: Imperial War Elephant with Gothic Howdah">
+                        <span class="font-semibold text-amber-200">♜ Rook</span><span class="text-slate-400">War Elephant</span>
+                    </div>
+                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Knight: Armored Destrier Warhorse & Cavalier">
+                        <span class="font-semibold text-amber-200">♞ Knight</span><span class="text-slate-400">Destrier Lancer</span>
+                    </div>
+                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Bishop: High Cathedral Inquisitor with Crosier & Censer">
+                        <span class="font-semibold text-amber-200">♝ Bishop</span><span class="text-slate-400">Arch-Prelate</span>
+                    </div>
+                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Queen: Gothic Battle-Empress with Longsword & Orb">
+                        <span class="font-semibold text-amber-200">♛ Queen</span><span class="text-slate-400">Battle-Empress</span>
+                    </div>
+                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="King: High Sovereign Monarch with Two-Handed Broadsword">
+                        <span class="font-semibold text-amber-200">♚ King</span><span class="text-slate-400">High Sovereign</span>
+                    </div>
+                    <div class="bg-white/5 rounded-lg px-2 py-1 flex items-center justify-between" title="Pawn: Heavy Infantry Halberdier with Kite Shield">
+                        <span class="font-semibold text-amber-200">♟ Pawn</span><span class="text-slate-400">Halberdier</span>
+                    </div>
+                </div>
+
+                <!-- Algebraic Move List -->
+                <div id="move-list" class="flex-1 overflow-y-auto pr-1 space-y-1 text-xs font-mono-code text-slate-300">
+                    <div class="text-slate-400 italic text-center py-4 font-sans text-[11px]">Select any sculpted piece to illuminate legal square boxes & targets.</div>
+                </div>
+
+                <!-- Animation Status & Material Score -->
+                <div class="mt-2.5 pt-2 border-t border-white/10 flex items-center justify-between text-[11px] text-slate-400">
+                    <span id="anim-status" class="flex items-center gap-1.5 text-amber-300/90 truncate">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        Sanctum Ready
+                    </span>
+                    <span id="eval-score" class="font-mono-code text-slate-300">Even</span>
+                </div>
+            </aside>
+        </div>
+
+        <!-- BOTTOM BAR: Single-Level Material Design 3 Navigation Dock -->
+        <footer class="w-full flex justify-center">
+            <nav aria-label="Primary Controls" class="md3-card pointer-events-auto rounded-full px-3 py-1.5 flex flex-wrap items-center justify-center gap-1.5 sm:gap-2">
+
+                <!-- Online PvP Lobby / Invite Friend Button -->
+                <button id="btn-pvp-lobby" class="md3-btn flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-emerald-500/20 hover:bg-emerald-500/35 text-emerald-200 border border-emerald-400/40 text-xs font-bold shadow-sm" title="Host or Join Live Online PvP Match">
+                    <span class="material-symbols-outlined text-base">sensors</span>
+                    <span id="pvp-btn-label">Live PvP Room</span>
+                </button>
+
+                <!-- Game Mode Toggle (vs Archmage AI / Local 2P Pass & Play) -->
+                <button id="btn-mode" class="md3-btn flex items-center gap-1.5 px-3.5 py-2 rounded-full bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 text-xs font-semibold" title="Switch between AI and Local 2-Player Pass & Play">
+                    <span class="material-symbols-outlined text-base" id="mode-icon">smart_toy</span>
+                    <span id="mode-label">Mode: vs. AI</span>
+                </button>
+
+                <!-- Auto-Rotate Camera on Turn (for Local 2P PvP) -->
+                <button id="btn-autoflip" class="md3-btn flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium" title="Auto-Rotate Camera for Local 2P Turn">
+                    <span class="material-symbols-outlined text-base">flip_camera_android</span>
+                    <span id="autoflip-label" class="hidden md:inline">Auto-Flip: Off</span>
+                </button>
+
+                <!-- Camera Preset Cycle -->
+                <button id="btn-camera" class="md3-btn flex items-center gap-1.5 px-3 py-2 rounded-full bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium" title="Cycle Camera Angle">
+                    <span class="material-symbols-outlined text-base">videocam</span>
+                    <span id="camera-label">White View</span>
+                </button>
+
+                <!-- Undo Move -->
+                <button id="btn-undo" class="md3-btn flex items-center gap-1 px-3 py-2 rounded-full bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium" title="Undo Last Turn">
+                    <span class="material-symbols-outlined text-base">undo</span>
+                    <span class="hidden sm:inline">Undo</span>
+                </button>
+
+                <!-- Toggle Move History Drawer -->
+                <button id="btn-history" class="md3-btn flex items-center gap-1 px-3 py-2 rounded-full bg-white/5 hover:bg-white/15 text-slate-200 text-xs font-medium" title="Show/Hide Battle Chronicle">
+                    <span class="material-symbols-outlined text-base">receipt_long</span>
+                    <span class="hidden sm:inline">Log</span>
+                </button>
+
+                <!-- Sound Effects Toggle -->
+                <button id="btn-sound" class="md3-btn flex items-center justify-center w-8 h-8 rounded-full bg-white/5 hover:bg-white/15 text-slate-200" title="Toggle Sound">
+                    <span id="sound-icon" class="material-symbols-outlined text-base">volume_up</span>
+                </button>
+
+                <!-- Reset Game -->
+                <button id="btn-reset" class="md3-btn flex items-center gap-1 px-3.5 py-2 rounded-full bg-rose-500/20 hover:bg-rose-500/35 text-rose-200 border border-rose-400/30 text-xs font-semibold" title="Start a Fresh Duel">
+                    <span class="material-symbols-outlined text-base">restart_alt</span>
+                    <span>New Duel</span>
+                </button>
+            </nav>
+        </footer>
+    </div>
+
+    <!-- LIVE PVP MULTIPLAYER ROOM MODAL -->
+    <div id="pvp-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-md p-4">
+        <div class="md3-card rounded-3xl p-6 max-w-md w-full border border-emerald-400/40 shadow-2xl">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-10 h-10 rounded-2xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300">
+                        <span class="material-symbols-outlined text-2xl">stadia_controller</span>
+                    </div>
+                    <div>
+                        <h3 class="font-gothic text-lg font-bold text-emerald-100">Sanctum PvP Arena</h3>
+                        <p class="text-xs text-slate-400">Play a friend online via Room Code or on this device</p>
+                    </div>
+                </div>
+                <button id="btn-close-pvp" class="md3-btn w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300">
+                    <span class="material-symbols-outlined text-lg">close</span>
+                </button>
+            </div>
+
+            <!-- Player Name Input -->
+            <div class="mb-4">
+                <label class="block text-[11px] font-semibold uppercase tracking-wider text-slate-400 mb-1">Your Commander Name</label>
+                <input id="input-player-name" type="text" maxlength="16" placeholder="Lord Commander" value="Commander" class="w-full px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 text-sm text-amber-100 focus:outline-none focus:border-emerald-400">
+            </div>
+
+            <!-- Create Online Room Section -->
+            <div class="p-4 rounded-2xl bg-white/5 border border-white/10 mb-3">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-xs font-bold text-amber-200 uppercase tracking-wider">1. Host Live Online Match</span>
+                    <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">WebRTC + Cloud Sync</span>
+                </div>
+                <p class="text-xs text-slate-300 mb-3">Generate a 6-character Room Code and shareable invite link for your friend to join as Black Obsidian.</p>
+                <div class="flex items-center gap-2">
+                    <button id="btn-create-room" class="md3-btn flex-1 py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg">
+                        <span class="material-symbols-outlined text-base">add_link</span>
+                        <span>Create Room Code</span>
+                    </button>
+                </div>
+
+                <!-- Active Room Code Display (Hidden until created/joined) -->
+                <div id="active-room-box" class="hidden mt-3 pt-3 border-t border-white/10">
+                    <div class="flex items-center justify-between bg-black/50 px-3 py-2 rounded-xl border border-emerald-400/40 mb-2">
+                        <div>
+                            <span class="text-[10px] text-slate-400 block uppercase">Active Room Code</span>
+                            <span id="display-room-code" class="font-mono-code text-lg font-extrabold tracking-widest text-emerald-300">------</span>
+                        </div>
+                        <div class="flex items-center gap-1.5">
+                            <button id="btn-copy-code" class="md3-btn px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-xs font-semibold text-slate-200 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm">content_copy</span>
+                                <span id="copy-code-text">Code</span>
+                            </button>
+                            <button id="btn-copy-link" class="md3-btn px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-xs font-semibold text-amber-200 border border-amber-400/30 flex items-center gap-1">
+                                <span class="material-symbols-outlined text-sm">share</span>
+                                <span id="copy-link-text">Invite Link</span>
+                            </button>
+                        </div>
+                    </div>
+                    <p id="room-wait-status" class="text-[11px] text-emerald-300 flex items-center gap-1.5">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                        Waiting for opponent to join room...
+                    </p>
+                </div>
+            </div>
+
+            <!-- Join Friend's Room Section -->
+            <div class="p-4 rounded-2xl bg-white/5 border border-white/10 mb-4">
+                <span class="text-xs font-bold text-rose-200 uppercase tracking-wider block mb-2">2. Join Friend's Room Code</span>
+                <div class="flex items-center gap-2">
+                    <input id="input-room-code" type="text" maxlength="6" placeholder="ENTER 6-DIGIT CODE" class="flex-1 px-3.5 py-2 rounded-xl bg-black/40 border border-white/15 font-mono-code text-sm uppercase tracking-widest text-rose-200 focus:outline-none focus:border-rose-400">
+                    <button id="btn-join-room" class="md3-btn py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs flex items-center gap-1 shadow-lg">
+                        <span class="material-symbols-outlined text-base">login</span>
+                        <span>Join</span>
+                    </button>
+                </div>
+                <p id="join-error-msg" class="text-[11px] text-rose-400 mt-1.5 hidden"></p>
+            </div>
+
+            <!-- Quick Local 2P Pass & Play Option -->
+            <div class="flex items-center justify-between pt-2 border-t border-white/10">
+                <span class="text-xs text-slate-400">Playing side-by-side on one screen?</span>
+                <button id="btn-start-local-2p" class="md3-btn px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-400/30 text-xs font-semibold">
+                    Start 2P Pass & Play
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PAWN PROMOTION DIALOG (Material Modal) -->
+    <div id="promotion-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-sm p-4">
+        <div class="md3-card rounded-3xl p-6 max-w-sm w-full text-center border border-amber-400/40">
+            <h3 class="font-gothic text-lg font-bold text-amber-200 mb-1">Imperial Consecration</h3>
+            <p class="text-xs text-slate-300 mb-5">Select the sculpted guardian rank for your Halberdier:</p>
+            <div class="grid grid-cols-2 gap-2.5">
+                <button data-promo="q" class="promo-choice md3-btn p-3 rounded-2xl bg-white/10 hover:bg-amber-500/30 border border-white/15 flex flex-col items-center gap-1">
+                    <span class="text-2xl text-amber-200">♛</span>
+                    <span class="text-xs font-bold text-amber-100">Battle-Empress</span>
+                </button>
+                <button data-promo="r" class="promo-choice md3-btn p-3 rounded-2xl bg-white/10 hover:bg-amber-500/30 border border-white/15 flex flex-col items-center gap-1">
+                    <span class="text-2xl text-amber-200">♜</span>
+                    <span class="text-xs font-bold text-amber-100">War Elephant</span>
+                </button>
+                <button data-promo="b" class="promo-choice md3-btn p-3 rounded-2xl bg-white/10 hover:bg-amber-500/30 border border-white/15 flex flex-col items-center gap-1">
+                    <span class="text-2xl text-amber-200">♝</span>
+                    <span class="text-xs font-bold text-amber-100">Arch-Prelate</span>
+                </button>
+                <button data-promo="n" class="promo-choice md3-btn p-3 rounded-2xl bg-white/10 hover:bg-amber-500/30 border border-white/15 flex flex-col items-center gap-1">
+                    <span class="text-2xl text-amber-200">♞</span>
+                    <span class="text-xs font-bold text-amber-100">Destrier Lancer</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- GAME OVER DIALOG -->
+    <div id="gameover-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/75 backdrop-blur-md p-4">
+        <div class="md3-card rounded-3xl p-7 max-w-md w-full text-center border border-amber-400/40">
+            <div class="w-14 h-14 mx-auto mb-3 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-amber-300">
+                <span class="material-symbols-outlined text-3xl">emoji_events</span>
+            </div>
+            <h3 id="gameover-title" class="font-gothic text-2xl font-bold text-amber-100 mb-2">Checkmate</h3>
+            <p id="gameover-subtitle" class="text-sm text-slate-300 mb-6">White Marble triumphs in the Gothic Sanctum.</p>
+            <div class="flex items-center justify-center gap-3">
+                <button id="btn-modal-close" class="md3-btn px-5 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-semibold text-slate-200">
+                    Inspect Board
+                </button>
+                <button id="btn-modal-restart" class="md3-btn px-6 py-2.5 rounded-full bg-amber-500 hover:bg-amber-400 text-xs font-bold text-slate-950 shadow-lg">
+                    Rematch Duel
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, getDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        /***********************************************************************
+         * 1. SOUND ENGINE (Weighty Stone Footsteps, Elephant Rumbling, Steel & Shatter)
+         ***********************************************************************/
+        class SoundManager {
+            constructor() {
+                this.enabled = true;
+                this.initialized = false;
+            }
+
+            async init() {
+                if (this.initialized) return;
+                try {
+                    await Tone.start();
+                    this.stepSynth = new Tone.MembraneSynth({
+                        pitchDecay: 0.08,
+                        octaves: 2.5,
+                        envelope: { attack: 0.004, decay: 0.24, sustain: 0, release: 0.12 }
+                    }).toDestination();
+                    this.stepSynth.volume.value = -7;
+
+                    this.stompSynth = new Tone.MembraneSynth({
+                        pitchDecay: 0.12,
+                        octaves: 4.5,
+                        envelope: { attack: 0.002, decay: 0.65, sustain: 0.06, release: 0.45 }
+                    }).toDestination();
+                    this.stompSynth.volume.value = 0;
+
+                    this.steelClang = new Tone.MetalSynth({
+                        frequency: 240,
+                        envelope: { attack: 0.001, decay: 0.28, release: 0.15 },
+                        harmonicity: 5.1,
+                        modulationIndex: 24,
+                        resonance: 3200,
+                        octaves: 1.5
+                    }).toDestination();
+                    this.steelClang.volume.value = -10;
+
+                    this.shatterNoise = new Tone.NoiseSynth({
+                        noise: { type: 'brown' },
+                        envelope: { attack: 0.003, decay: 0.58, sustain: 0, release: 0.38 }
+                    }).toDestination();
+                    this.shatterNoise.volume.value = -2;
+
+                    this.chimeSynth = new Tone.PolySynth(Tone.Synth, {
+                        oscillator: { type: 'triangle' },
+                        envelope: { attack: 0.015, decay: 0.6, sustain: 0.1, release: 1.1 }
+                    }).toDestination();
+                    this.chimeSynth.volume.value = -11;
+
+                    this.initialized = true;
+                } catch (e) {
+                    console.warn("Audio init skipped:", e);
+                }
+            }
+
+            playSelect() {
+                if (!this.enabled || !this.initialized) return;
+                this.chimeSynth.triggerAttackRelease(["D4", "A4"], "16n");
+            }
+
+            playMove(pieceType) {
+                if (!this.enabled || !this.initialized) return;
+                if (pieceType === 'r') {
+                    this.stompSynth.triggerAttackRelease("B0", "8n");
+                } else if (pieceType === 'n') {
+                    this.stepSynth.triggerAttackRelease("E2", "16n");
+                    setTimeout(() => {
+                        if (this.enabled) this.stepSynth.triggerAttackRelease("C2", "16n");
+                    }, 120);
+                } else {
+                    this.stepSynth.triggerAttackRelease("D2", "16n");
+                }
+            }
+
+            playAttack(pieceType) {
+                if (!this.enabled || !this.initialized) return;
+                this.steelClang.triggerAttackRelease("16n");
+                this.stompSynth.triggerAttackRelease("C1", "4n");
+            }
+
+            playShatter() {
+                if (!this.enabled || !this.initialized) return;
+                this.shatterNoise.triggerAttackRelease("4n");
+                this.steelClang.triggerAttackRelease("8n");
+            }
+
+            playCheck() {
+                if (!this.enabled || !this.initialized) return;
+                this.chimeSynth.triggerAttackRelease(["A3", "E4", "C5"], "2n");
+            }
+        }
+
+        const soundFX = new SoundManager();
+
+        /***********************************************************************
+         * 2. HIGH-RESOLUTION PROCEDURAL PBR TEXTURES & BUMP MAPS
+         ***********************************************************************/
+        function createCarraraMarbleMaps() {
+            const colorCanvas = document.createElement('canvas');
+            const bumpCanvas = document.createElement('canvas');
+            colorCanvas.width = bumpCanvas.width = 512;
+            colorCanvas.height = bumpCanvas.height = 512;
+            const cCtx = colorCanvas.getContext('2d');
+            const bCtx = bumpCanvas.getContext('2d');
+
+            // Base warm Carrara ivory stone
+            cCtx.fillStyle = '#f3efe6';
+            cCtx.fillRect(0, 0, 512, 512);
+            bCtx.fillStyle = '#808080';
+            bCtx.fillRect(0, 0, 512, 512);
+
+            // Subtle mineral clouds
+            for (let i = 0; i < 120; i++) {
+                const x = Math.random() * 512;
+                const y = Math.random() * 512;
+                const r = 20 + Math.random() * 80;
+                const grad = cCtx.createRadialGradient(x, y, 2, x, y, r);
+                grad.addColorStop(0, 'rgba(205, 198, 184, 0.16)');
+                grad.addColorStop(1, 'rgba(243, 239, 230, 0)');
+                cCtx.fillStyle = grad;
+                cCtx.fillRect(0, 0, 512, 512);
+            }
+
+            // Realistic jagged mineral & gold veins
+            for (let v = 0; v < 38; v++) {
+                let x = Math.random() * 512;
+                let y = Math.random() * 512;
+                const isGoldVein = v % 5 === 0;
+                cCtx.beginPath();
+                bCtx.beginPath();
+                cCtx.moveTo(x, y);
+                bCtx.moveTo(x, y);
+
+                for (let step = 0; step < 18; step++) {
+                    x += (Math.random() - 0.45) * 42;
+                    y += (Math.random() - 0.45) * 42;
+                    cCtx.lineTo(x, y);
+                    bCtx.lineTo(x, y);
+                }
+
+                cCtx.strokeStyle = isGoldVein ? 'rgba(196, 154, 69, 0.42)' : 'rgba(130, 128, 138, 0.28)';
+                cCtx.lineWidth = isGoldVein ? 1.6 : (0.7 + Math.random() * 2.0);
+                cCtx.stroke();
+
+                bCtx.strokeStyle = isGoldVein ? '#a8a8a8' : '#585858';
+                bCtx.lineWidth = 1.8;
+                bCtx.stroke();
+            }
+
+            const map = new THREE.CanvasTexture(colorCanvas);
+            const bumpMap = new THREE.CanvasTexture(bumpCanvas);
+            map.wrapS = map.wrapT = bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
+            return { map, bumpMap };
+        }
+
+        function createVolcanicObsidianMaps() {
+            const colorCanvas = document.createElement('canvas');
+            const bumpCanvas = document.createElement('canvas');
+            colorCanvas.width = bumpCanvas.width = 512;
+            colorCanvas.height = bumpCanvas.height = 512;
+            const cCtx = colorCanvas.getContext('2d');
+            const bCtx = bumpCanvas.getContext('2d');
+
+            cCtx.fillStyle = '#12131a';
+            cCtx.fillRect(0, 0, 512, 512);
+            bCtx.fillStyle = '#787878';
+            bCtx.fillRect(0, 0, 512, 512);
+
+            // Fractured basalt striations & crimson/bronze veins
+            for (let i = 0; i < 55; i++) {
+                let x = Math.random() * 512;
+                let y = Math.random() * 512;
+                const isEmber = i % 6 === 0;
+                cCtx.beginPath();
+                bCtx.beginPath();
+                cCtx.moveTo(x, y);
+                bCtx.moveTo(x, y);
+                for (let s = 0; s < 14; s++) {
+                    x += (Math.random() - 0.5) * 48;
+                    y += (Math.random() - 0.5) * 48;
+                    cCtx.lineTo(x, y);
+                    bCtx.lineTo(x, y);
+                }
+                cCtx.strokeStyle = isEmber ? 'rgba(215, 58, 73, 0.35)' : 'rgba(55, 62, 82, 0.38)';
+                cCtx.lineWidth = 0.8 + Math.random() * 2.2;
+                cCtx.stroke();
+
+                bCtx.strokeStyle = isEmber ? '#3a3a3a' : '#a0a0a0';
+                bCtx.lineWidth = 2.0;
+                bCtx.stroke();
+            }
+
+            const map = new THREE.CanvasTexture(colorCanvas);
+            const bumpMap = new THREE.CanvasTexture(bumpCanvas);
+            map.wrapS = map.wrapT = bumpMap.wrapS = bumpMap.wrapT = THREE.RepeatWrapping;
+            return { map, bumpMap };
+        }
+
+        function createCoordTexture(label) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, 64, 64);
+            ctx.font = 'bold 38px "Cinzel", serif';
+            ctx.fillStyle = '#d4af37';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(label, 32, 34);
+            return new THREE.CanvasTexture(canvas);
+        }
+
+        /***********************************************************************
+         * 3. THREE.JS SCENE, GOTHIC CATHEDRAL & PBR MATERIALS
+         ***********************************************************************/
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x07080d);
+        scene.fog = new THREE.FogExp2(0x07080d, 0.015);
+
+        const camera = new THREE.PerspectiveCamera(38, window.innerWidth / window.innerHeight, 0.1, 150);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.22;
+        container.appendChild(renderer.domElement);
+
+        const marbleMaps = createCarraraMarbleMaps();
+        const obsidianMaps = createVolcanicObsidianMaps();
+
+        // Realistic Sculpted Stone, Metal, Ivory & Relic Materials
+        const whiteMarbleMat = new THREE.MeshStandardMaterial({
+            color: 0xf4f0e8,
+            map: marbleMaps.map,
+            bumpMap: marbleMaps.bumpMap,
+            bumpScale: 0.018,
+            roughness: 0.28,
+            metalness: 0.06
+        });
+
+        const blackObsidianMat = new THREE.MeshStandardMaterial({
+            color: 0x1a1c26,
+            map: obsidianMaps.map,
+            bumpMap: obsidianMaps.bumpMap,
+            bumpScale: 0.024,
+            roughness: 0.22,
+            metalness: 0.42
+        });
+
+        const antiqueGoldMat = new THREE.MeshStandardMaterial({
+            color: 0xd4af37,
+            bumpMap: marbleMaps.bumpMap,
+            bumpScale: 0.01,
+            roughness: 0.24,
+            metalness: 0.88
+        });
+
+        const crimsonBronzeMat = new THREE.MeshStandardMaterial({
+            color: 0x9e2a2b,
+            bumpMap: obsidianMaps.bumpMap,
+            bumpScale: 0.012,
+            roughness: 0.26,
+            metalness: 0.82,
+            emissive: 0x3b0910,
+            emissiveIntensity: 0.25
+        });
+
+        const forgedSteelMat = new THREE.MeshStandardMaterial({
+            color: 0xcbd5e1,
+            bumpMap: marbleMaps.bumpMap,
+            bumpScale: 0.008,
+            roughness: 0.18,
+            metalness: 0.92
+        });
+
+        const darkDamascusMat = new THREE.MeshStandardMaterial({
+            color: 0x475569,
+            bumpMap: obsidianMaps.bumpMap,
+            bumpScale: 0.01,
+            roughness: 0.20,
+            metalness: 0.90
+        });
+
+        const ivoryTuskMat = new THREE.MeshStandardMaterial({
+            color: 0xfefae0,
+            roughness: 0.20,
+            metalness: 0.05
+        });
+
+        const darkHornMat = new THREE.MeshStandardMaterial({
+            color: 0x2b1d1e,
+            roughness: 0.25,
+            metalness: 0.35
+        });
+
+        const whiteRelicMat = new THREE.MeshStandardMaterial({
+            color: 0x7dd3fc,
+            emissive: 0x0284c7,
+            emissiveIntensity: 1.4,
+            roughness: 0.1
+        });
+
+        const blackRelicMat = new THREE.MeshStandardMaterial({
+            color: 0xf43f5e,
+            emissive: 0xe11d48,
+            emissiveIntensity: 1.6,
+            roughness: 0.1
+        });
+
+        // Cathedral Lighting Rig
+        const ambientLight = new THREE.AmbientLight(0x64748b, 0.95);
+        scene.add(ambientLight);
+
+        const hemiLight = new THREE.HemisphereLight(0xcbd5e1, 0x1e1b18, 0.65);
+        scene.add(hemiLight);
+
+        const moonLight = new THREE.DirectionalLight(0xbad7ff, 1.55);
+        moonLight.position.set(-11, 22, -13);
+        moonLight.castShadow = true;
+        moonLight.shadow.mapSize.width = 2048;
+        moonLight.shadow.mapSize.height = 2048;
+        const d = 9.5;
+        moonLight.shadow.camera.left = -d;
+        moonLight.shadow.camera.right = d;
+        moonLight.shadow.camera.top = d;
+        moonLight.shadow.camera.bottom = -d;
+        moonLight.shadow.bias = -0.0005;
+        scene.add(moonLight);
+
+        // Warm Sculptural Rim Light from Opposite Side
+        const rimLight = new THREE.DirectionalLight(0xfde68a, 0.72);
+        rimLight.position.set(14, 12, 14);
+        scene.add(rimLight);
+
+        const torchLights = [];
+        const torchFlames = [];
+        const torchPositions = [
+            [-8.5, 4.5, -8.5],
+            [8.5, 4.5, -8.5],
+            [-8.5, 4.5, 8.5],
+            [8.5, 4.5, 8.5]
+        ];
+
+        function buildGothicCathedral() {
+            const cathedralGroup = new THREE.Group();
+            const stoneMat = new THREE.MeshStandardMaterial({
+                color: 0x14161f,
+                bumpMap: obsidianMaps.bumpMap,
+                bumpScale: 0.03,
+                roughness: 0.85,
+                metalness: 0.12
+            });
+            const darkStoneMat = new THREE.MeshStandardMaterial({
+                color: 0x0c0e14,
+                roughness: 0.9,
+                metalness: 0.1
+            });
+
+            const floorMesh = new THREE.Mesh(new THREE.CylinderGeometry(36, 36, 1, 32), darkStoneMat);
+            floorMesh.position.y = -1.6;
+            floorMesh.receiveShadow = true;
+            cathedralGroup.add(floorMesh);
+
+            const dais1 = new THREE.Mesh(new THREE.BoxGeometry(12.8, 0.5, 12.8), stoneMat);
+            dais1.position.y = -0.85;
+            dais1.receiveShadow = true;
+            cathedralGroup.add(dais1);
+
+            const dais2 = new THREE.Mesh(new THREE.BoxGeometry(10.8, 0.5, 10.8), stoneMat);
+            dais2.position.y = -0.45;
+            dais2.receiveShadow = true;
+            cathedralGroup.add(dais2);
+
+            const pillarPositions = [];
+            for (let z = -22; z <= 22; z += 11) pillarPositions.push([-13, z], [13, z]);
+            for (let x = -11; x <= 11; x += 22) pillarPositions.push([x, -24], [x, 24]);
+
+            pillarPositions.forEach(([px, pz]) => {
+                const colGroup = new THREE.Group();
+                colGroup.position.set(px, -1, pz);
+                const plinth = new THREE.Mesh(new THREE.BoxGeometry(2.2, 1.2, 2.2), stoneMat);
+                plinth.position.y = 0.6;
+                colGroup.add(plinth);
+
+                const mainShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.85, 18, 16), stoneMat);
+                mainShaft.position.y = 9.6;
+                colGroup.add(mainShaft);
+
+                // Clustered Gothic colonnettes
+                for (let a = 0; a < 4; a++) {
+                    const ang = (a * Math.PI) / 2;
+                    const subShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.25, 18, 10), stoneMat);
+                    subShaft.position.set(Math.cos(ang) * 0.72, 9.6, Math.sin(ang) * 0.72);
+                    colGroup.add(subShaft);
+                }
+
+                const capital = new THREE.Mesh(new THREE.CylinderGeometry(1.25, 0.85, 1.2, 8), stoneMat);
+                capital.position.y = 18.8;
+                colGroup.add(capital);
+                cathedralGroup.add(colGroup);
+            });
+
+            // Stained Glass Rose Window & Volumetric God-Ray Cone
+            const roseGroup = new THREE.Group();
+            roseGroup.position.set(0, 13, -27);
+            roseGroup.add(new THREE.Mesh(new THREE.TorusGeometry(6.5, 0.55, 12, 48), stoneMat));
+            const glassMat = new THREE.MeshBasicMaterial({ color: 0x3b82f6, transparent: true, opacity: 0.28, side: THREE.DoubleSide });
+            roseGroup.add(new THREE.Mesh(new THREE.CircleGeometry(6.3, 32), glassMat));
+            cathedralGroup.add(roseGroup);
+
+            // Subtle Cathedral God-Ray Shaft
+            const rayGeo = new THREE.ConeGeometry(7.5, 28, 24, 1, true);
+            const rayMat = new THREE.MeshBasicMaterial({
+                color: 0x93c5fd,
+                transparent: true,
+                opacity: 0.04,
+                side: THREE.DoubleSide,
+                depthWrite: false
+            });
+            const godRay = new THREE.Mesh(rayGeo, rayMat);
+            godRay.position.set(0, 6.5, -13);
+            godRay.rotation.x = Math.PI / 3.2;
+            cathedralGroup.add(godRay);
+
+            // 4 Corner Sanctuary Braziers
+            torchPositions.forEach(([tx, ty, tz]) => {
+                const brazier = new THREE.Group();
+                brazier.position.set(tx, -1, tz);
+                const stand = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.48, 4.8, 12), stoneMat);
+                stand.position.y = 2.4;
+                brazier.add(stand);
+
+                const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.68, 0.25, 0.6, 12), antiqueGoldMat);
+                bowl.position.y = 4.9;
+                brazier.add(bowl);
+
+                const flame = new THREE.Mesh(new THREE.ConeGeometry(0.38, 0.95, 10), new THREE.MeshBasicMaterial({ color: 0xffaa33 }));
+                flame.position.y = 5.5;
+                brazier.add(flame);
+                torchFlames.push(flame);
+
+                const pLight = new THREE.PointLight(0xff8c24, 1.35, 22, 1.8);
+                pLight.position.set(tx, ty, tz);
+                scene.add(pLight);
+                torchLights.push(pLight);
+
+                cathedralGroup.add(brazier);
+            });
+
+            scene.add(cathedralGroup);
+        }
+
+        buildGothicCathedral();
+
+        // Floating Cathedral Dust Motes
+        const dustCount = 180;
+        const dustGeo = new THREE.BufferGeometry();
+        const dustPositions = new Float32Array(dustCount * 3);
+        for (let i = 0; i < dustCount; i++) {
+            dustPositions[i * 3] = (Math.random() - 0.5) * 24;
+            dustPositions[i * 3 + 1] = Math.random() * 12;
+            dustPositions[i * 3 + 2] = (Math.random() - 0.5) * 24;
+        }
+        dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+        const dustParticles = new THREE.Points(
+            dustGeo,
+            new THREE.PointsMaterial({ color: 0xfde68a, size: 0.075, transparent: true, opacity: 0.42 })
+        );
+        scene.add(dustParticles);
+
+        /***********************************************************************
+         * 4. CHESSBOARD WITH CRISP 3D GRID LINES, BOXES & A-H / 1-8 LABELS
+         ***********************************************************************/
+        const boardGroup = new THREE.Group();
+        scene.add(boardGroup);
+
+        const squareMeshes = {};
+        const highlightMeshes = [];
+        const lastMoveMeshes = [];
+        const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
+        function squareToWorld(sq) {
+            const f = files.indexOf(sq[0]);
+            const r = parseInt(sq[1], 10) - 1;
+            return new THREE.Vector3(f - 3.5, 0, 3.5 - r);
+        }
+
+        function createSquareBoxFrame(colorHex, size = 0.95, thickness = 0.055, height = 0.032) {
+            const frameGroup = new THREE.Group();
+            const mat = new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.92 });
+            const half = size / 2;
+
+            const nBar = new THREE.Mesh(new THREE.BoxGeometry(size, height, thickness), mat);
+            nBar.position.set(0, height / 2, -half + thickness / 2);
+            const sBar = new THREE.Mesh(new THREE.BoxGeometry(size, height, thickness), mat);
+            sBar.position.set(0, height / 2, half - thickness / 2);
+            const eBar = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, size), mat);
+            eBar.position.set(half - thickness / 2, height / 2, 0);
+            const wBar = new THREE.Mesh(new THREE.BoxGeometry(thickness, height, size), mat);
+            wBar.position.set(-half + thickness / 2, height / 2, 0);
+
+            frameGroup.add(nBar, sBar, eBar, wBar);
+            return frameGroup;
+        }
+
+        function buildChessboardWithGridBoxes() {
+            const frameMat = new THREE.MeshStandardMaterial({
+                color: 0x13151e,
+                bumpMap: obsidianMaps.bumpMap,
+                bumpScale: 0.015,
+                roughness: 0.35,
+                metalness: 0.65
+            });
+            const frame = new THREE.Mesh(new THREE.BoxGeometry(9.5, 0.44, 9.5), frameMat);
+            frame.position.y = -0.23;
+            frame.receiveShadow = true;
+            boardGroup.add(frame);
+
+            const gridBed = new THREE.Mesh(new THREE.BoxGeometry(8.16, 0.38, 8.16), antiqueGoldMat);
+            gridBed.position.y = -0.19;
+            boardGroup.add(gridBed);
+
+            // Crisp Brushed Brass/Gold 3D Grid Line Bars separating every row and column
+            for (let i = -4; i <= 4; i++) {
+                const vLine = new THREE.Mesh(new THREE.BoxGeometry(0.042, 0.028, 8.08), antiqueGoldMat);
+                vLine.position.set(i, 0.005, 0);
+                boardGroup.add(vLine);
+
+                const hLine = new THREE.Mesh(new THREE.BoxGeometry(8.08, 0.028, 0.042), antiqueGoldMat);
+                hLine.position.set(0, 0.005, i);
+                boardGroup.add(hLine);
+            }
+
+            const lightSqMat = new THREE.MeshStandardMaterial({
+                color: 0xeae5dc,
+                map: marbleMaps.map,
+                bumpMap: marbleMaps.bumpMap,
+                bumpScale: 0.01,
+                roughness: 0.25,
+                metalness: 0.06
+            });
+            const darkSqMat = new THREE.MeshStandardMaterial({
+                color: 0x1b1e2b,
+                map: obsidianMaps.map,
+                bumpMap: obsidianMaps.bumpMap,
+                bumpScale: 0.012,
+                roughness: 0.22,
+                metalness: 0.38
+            });
+
+            const sqGeo = new THREE.BoxGeometry(0.93, 0.16, 0.93);
+
+            for (let r = 0; r < 8; r++) {
+                for (let f = 0; f < 8; f++) {
+                    const isLight = (r + f) % 2 === 1;
+                    const sqName = files[f] + (r + 1);
+                    const mesh = new THREE.Mesh(sqGeo, isLight ? lightSqMat : darkSqMat);
+                    mesh.position.set(f - 3.5, -0.075, 3.5 - r);
+                    mesh.receiveShadow = true;
+                    mesh.userData = { square: sqName, isLight };
+                    boardGroup.add(mesh);
+                    squareMeshes[sqName] = mesh;
+                }
+            }
+
+            const planeGeo = new THREE.PlaneGeometry(0.42, 0.42);
+            for (let i = 0; i < 8; i++) {
+                const fileChar = files[i].toUpperCase();
+                const rankChar = String(i + 1);
+
+                const fMat = new THREE.MeshBasicMaterial({ map: createCoordTexture(fileChar), transparent: true });
+                const rMat = new THREE.MeshBasicMaterial({ map: createCoordTexture(rankChar), transparent: true });
+
+                const botLabel = new THREE.Mesh(planeGeo, fMat);
+                botLabel.rotation.x = -Math.PI / 2;
+                botLabel.position.set(i - 3.5, 0.01, 4.38);
+                boardGroup.add(botLabel);
+
+                const topLabel = new THREE.Mesh(planeGeo, fMat);
+                topLabel.rotation.x = -Math.PI / 2;
+                topLabel.rotation.z = Math.PI;
+                topLabel.position.set(i - 3.5, 0.01, -4.38);
+                boardGroup.add(topLabel);
+
+                const leftLabel = new THREE.Mesh(planeGeo, rMat);
+                leftLabel.rotation.x = -Math.PI / 2;
+                leftLabel.position.set(-4.38, 0.01, 3.5 - i);
+                boardGroup.add(leftLabel);
+
+                const rightLabel = new THREE.Mesh(planeGeo, rMat);
+                rightLabel.rotation.x = -Math.PI / 2;
+                rightLabel.position.set(4.38, 0.01, 3.5 - i);
+                boardGroup.add(rightLabel);
+            }
+        }
+
+        buildChessboardWithGridBoxes();
+
+        /***********************************************************************
+         * 5. REALISTIC SCULPTED ANATOMICAL CHARACTERS (DARK SOULS / WIZARD'S CHESS)
+         *    - Multi-segment anatomical sculpting, Lathe profiles, layered Gothic plate,
+         *      fluted drapery, realistic weapons, and articulated limbs.
+         ***********************************************************************/
+        function addShadowedVisorEyes(parentGroup, relicMat, yPos, zPos, sep = 0.042) {
+            const eyeGeo = new THREE.SphereGeometry(0.014, 8, 8);
+            const leftEye = new THREE.Mesh(eyeGeo, relicMat);
+            leftEye.position.set(-sep, yPos, zPos);
+            leftEye.scale.set(1.5, 0.7, 0.8);
+
+            const rightEye = new THREE.Mesh(eyeGeo, relicMat);
+            rightEye.position.set(sep, yPos, zPos);
+            rightEye.scale.set(1.5, 0.7, 0.8);
+
+            parentGroup.add(leftEye, rightEye);
+        }
+
+        function createSculptedPedestal(mainMat, trimMat) {
+            const pedGroup = new THREE.Group();
+            // Lathe profile for a realistic classical molded chess pedestal
+            const pts = [
+                new THREE.Vector2(0.0, 0.0),
+                new THREE.Vector2(0.41, 0.0),
+                new THREE.Vector2(0.41, 0.04),
+                new THREE.Vector2(0.37, 0.06),
+                new THREE.Vector2(0.39, 0.09),
+                new THREE.Vector2(0.34, 0.13),
+                new THREE.Vector2(0.35, 0.16),
+                new THREE.Vector2(0.0, 0.16)
+            ];
+            const latheGeo = new THREE.LatheGeometry(pts, 28);
+            const baseMesh = new THREE.Mesh(latheGeo, mainMat);
+            baseMesh.castShadow = true;
+            baseMesh.receiveShadow = true;
+            pedGroup.add(baseMesh);
+
+            // Filigree Bronze/Gold Molding Ring
+            const ring = new THREE.Mesh(new THREE.TorusGeometry(0.365, 0.016, 10, 28), trimMat);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.y = 0.14;
+            pedGroup.add(ring);
+
+            return pedGroup;
+        }
+
+        function createRealisticSculptedPiece(type, color) {
+            const root = new THREE.Group();
+            const isWhite = color === 'w';
+            const stoneMat = isWhite ? whiteMarbleMat : blackObsidianMat;
+            const trimMat = isWhite ? antiqueGoldMat : crimsonBronzeMat;
+            const steelMat = isWhite ? forgedSteelMat : darkDamascusMat;
+            const tuskMat = isWhite ? ivoryTuskMat : darkHornMat;
+            const relicMat = isWhite ? whiteRelicMat : blackRelicMat;
+
+            const charRig = new THREE.Group();
+            root.add(charRig);
+
+            // 1. Classical Sculpted Stone Pedestal
+            const pedestal = createSculptedPedestal(stoneMat, trimMat);
+            charRig.add(pedestal);
+
+            // Articulated sub-groups for procedural animation
+            const bodyGroup = new THREE.Group();
+            const headGroup = new THREE.Group();
+            const weaponGroup = new THREE.Group();
+            const extraLimbs = {};
+
+            charRig.add(bodyGroup);
+            bodyGroup.add(headGroup);
+            bodyGroup.add(weaponGroup);
+
+            if (type === 'r') {
+                // =========================================================================
+                // ROOK: IMPERIAL WAR ELEPHANT (Realistic Anatomical Gaja & Gothic Howdah)
+                // =========================================================================
+                extraLimbs.legs = [];
+                const legCoords = [
+                    [-0.17, 0.16, 0.18], [0.17, 0.16, 0.18],
+                    [-0.17, 0.16, -0.18], [0.17, 0.16, -0.18]
+                ];
+                legCoords.forEach(([lx, ly, lz]) => {
+                    const legGroup = new THREE.Group();
+                    legGroup.position.set(lx, ly, lz);
+
+                    // Upper muscular thigh/shoulder
+                    const upperLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.095, 0.082, 0.22, 14), stoneMat);
+                    upperLeg.position.y = 0.22;
+                    upperLeg.castShadow = true;
+
+                    // Knee joint & lower pillar leg
+                    const knee = new THREE.Mesh(new THREE.SphereGeometry(0.084, 12, 12), stoneMat);
+                    knee.position.y = 0.12;
+                    const lowerLeg = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.095, 0.16, 14), stoneMat);
+                    lowerLeg.position.y = 0.06;
+
+                    // Armored Greave & Sculpted Toes
+                    const greave = new THREE.Mesh(new THREE.CylinderGeometry(0.088, 0.10, 0.12, 12, 1, true, -0.8, 1.6), trimMat);
+                    greave.position.y = 0.08;
+                    for (let t = -1; t <= 1; t++) {
+                        const toe = new THREE.Mesh(new THREE.SphereGeometry(0.026, 8, 8), trimMat);
+                        toe.position.set(t * 0.035, 0.015, 0.085);
+                        legGroup.add(toe);
+                    }
+
+                    legGroup.add(upperLeg, knee, lowerLeg, greave);
+                    bodyGroup.add(legGroup);
+                    extraLimbs.legs.push(legGroup);
+                });
+
+                // Multi-segment Anatomical Elephant Torso (Ribcage, Muscular Shoulders, Haunches)
+                const ribcage = new THREE.Mesh(new THREE.SphereGeometry(0.28, 20, 18), stoneMat);
+                ribcage.scale.set(1.05, 0.92, 1.38);
+                ribcage.position.set(0, 0.50, 0.0);
+                ribcage.castShadow = true;
+                bodyGroup.add(ribcage);
+
+                const shoulders = new THREE.Mesh(new THREE.SphereGeometry(0.26, 18, 16), stoneMat);
+                shoulders.scale.set(1.12, 1.0, 0.95);
+                shoulders.position.set(0, 0.54, 0.15);
+                bodyGroup.add(shoulders);
+
+                const haunches = new THREE.Mesh(new THREE.SphereGeometry(0.24, 18, 16), stoneMat);
+                haunches.scale.set(1.0, 0.95, 1.0);
+                haunches.position.set(0, 0.49, -0.20);
+                bodyGroup.add(haunches);
+
+                // Ornate Caparison War-Blanket & Binding Chains
+                const caparison = new THREE.Mesh(new THREE.BoxGeometry(0.58, 0.34, 0.44), trimMat);
+                caparison.position.set(0, 0.50, -0.01);
+                caparison.castShadow = true;
+                bodyGroup.add(caparison);
+
+                const sideReliefL = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.28, 0.36), stoneMat);
+                sideReliefL.position.set(-0.29, 0.48, -0.01);
+                const sideReliefR = sideReliefL.clone();
+                sideReliefR.position.x = 0.29;
+                bodyGroup.add(sideReliefL, sideReliefR);
+
+                // Gothic Stone Howdah / Rook Watchtower strapped to back
+                const howdahBase = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.10, 0.42), trimMat);
+                howdahBase.position.set(0, 0.72, -0.04);
+                bodyGroup.add(howdahBase);
+
+                const towerPts = [
+                    new THREE.Vector2(0.0, 0.0),
+                    new THREE.Vector2(0.22, 0.0),
+                    new THREE.Vector2(0.19, 0.12),
+                    new THREE.Vector2(0.18, 0.34),
+                    new THREE.Vector2(0.23, 0.40),
+                    new THREE.Vector2(0.23, 0.46),
+                    new THREE.Vector2(0.0, 0.46)
+                ];
+                const towerMesh = new THREE.Mesh(new THREE.LatheGeometry(towerPts, 8), stoneMat);
+                towerMesh.position.set(0, 0.76, -0.04);
+                towerMesh.castShadow = true;
+                bodyGroup.add(towerMesh);
+
+                // Gothic Battlement Crenellations & Narrow Arrow Slits
+                for (let i = 0; i < 8; i++) {
+                    const ang = (i * Math.PI) / 4;
+                    const merlon = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.09, 0.075), stoneMat);
+                    merlon.position.set(Math.cos(ang) * 0.19, 1.25, -0.04 + Math.sin(ang) * 0.19);
+                    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.02, 0.085), trimMat);
+                    cap.position.set(Math.cos(ang) * 0.19, 1.30, -0.04 + Math.sin(ang) * 0.19);
+                    bodyGroup.add(merlon, cap);
+                }
+
+                // Realistic Elephant Head (Temporal Ridges, Brow, Deep-Set Eyes, Armored Chanfron)
+                headGroup.position.set(0, 0.60, 0.32);
+                const cranium = new THREE.Mesh(new THREE.SphereGeometry(0.20, 18, 18), stoneMat);
+                cranium.scale.set(1.05, 1.12, 0.95);
+                cranium.castShadow = true;
+                headGroup.add(cranium);
+
+                // Dual Temporal Domes (Anatomical Asian/War Elephant skull)
+                const domeL = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 14), stoneMat);
+                domeL.position.set(-0.08, 0.12, 0.02);
+                const domeR = domeL.clone();
+                domeR.position.x = 0.08;
+                headGroup.add(domeL, domeR);
+
+                // Steel/Gold War Chanfron Face-Plate with Center Spike
+                const chanfron = new THREE.Mesh(new THREE.ConeGeometry(0.14, 0.28, 5), trimMat);
+                chanfron.rotation.x = Math.PI / 2.2;
+                chanfron.position.set(0, 0.06, 0.15);
+                const headSpike = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.14, 8), steelMat);
+                headSpike.rotation.x = Math.PI / 2;
+                headSpike.position.set(0, 0.08, 0.24);
+                headGroup.add(chanfron, headSpike);
+
+                // Deep-set glowing eyes on the sides of the head
+                addShadowedVisorEyes(headGroup, relicMat, 0.02, 0.15, 0.14);
+
+                // Realistic Sculpted Elephant Ears (Multi-lobed polygonal fan)
+                extraLimbs.ears = [];
+                [-1, 1].forEach(dir => {
+                    const earPivot = new THREE.Group();
+                    earPivot.position.set(dir * 0.18, 0.04, -0.02);
+                    const earPlate = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 0.025, 12), stoneMat);
+                    earPlate.rotation.x = Math.PI / 2;
+                    earPlate.scale.set(0.85, 1.25, 1);
+                    earPlate.position.set(dir * 0.10, -0.03, 0);
+
+                    const earRim = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.015, 6, 12, Math.PI), trimMat);
+                    earRim.position.set(dir * 0.10, -0.03, 0);
+                    earRim.rotation.z = dir === 1 ? -Math.PI / 2 : Math.PI / 2;
+
+                    earPivot.add(earPlate, earRim);
+                    earPivot.rotation.y = dir * 0.38;
+                    headGroup.add(earPivot);
+                    extraLimbs.ears.push(earPivot);
+                });
+
+                // Long Curved Ivory/Horn Tusks with Banded War-Rings
+                [-1, 1].forEach(dir => {
+                    const tuskGroup = new THREE.Group();
+                    tuskGroup.position.set(dir * 0.11, -0.08, 0.14);
+
+                    // 3-segment curved tusk
+                    const seg1 = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.038, 0.18, 10), tuskMat);
+                    seg1.rotation.x = Math.PI / 2.5;
+                    seg1.position.set(0, -0.04, 0.08);
+
+                    const seg2 = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.22, 10), tuskMat);
+                    seg2.rotation.x = Math.PI / 3.4;
+                    seg2.position.set(dir * 0.02, 0.0, 0.24);
+
+                    const band = new THREE.Mesh(new THREE.TorusGeometry(0.032, 0.008, 8, 12), trimMat);
+                    band.position.set(0, -0.03, 0.14);
+
+                    tuskGroup.add(seg1, seg2, band);
+                    headGroup.add(tuskGroup);
+                });
+
+                // 6-Segment Smoothly Curving Muscular Trunk with Spiked War-Cuff
+                weaponGroup.position.set(0, 0.56, 0.46);
+                const trunkSegments = [];
+                const segRadii = [0.072, 0.064, 0.056, 0.048, 0.042, 0.035];
+                let prevParent = weaponGroup;
+                for (let s = 0; s < 6; s++) {
+                    const segPivot = new THREE.Group();
+                    segPivot.position.set(0, s === 0 ? 0 : -0.075, s === 0 ? 0 : 0.015);
+                    const rTop = segRadii[s];
+                    const rBot = segRadii[s + 1] || 0.030;
+                    const cyl = new THREE.Mesh(new THREE.CylinderGeometry(rTop, rBot, 0.09, 12), stoneMat);
+                    cyl.position.y = -0.045;
+                    cyl.castShadow = true;
+                    segPivot.add(cyl);
+
+                    // Armored war-cuff on lower trunk
+                    if (s === 2 || s === 4) {
+                        const cuff = new THREE.Mesh(new THREE.TorusGeometry(rTop + 0.004, 0.01, 6, 12), trimMat);
+                        cuff.rotation.x = Math.PI / 2;
+                        cuff.position.y = -0.04;
+                        segPivot.add(cuff);
+                    }
+                    segPivot.rotation.x = s < 3 ? -0.18 : 0.28;
+                    prevParent.add(segPivot);
+                    trunkSegments.push(segPivot);
+                    prevParent = segPivot;
+                }
+                extraLimbs.trunkSegments = trunkSegments;
+                extraLimbs.trunk = weaponGroup;
+
+            } else if (type === 'n') {
+                // =========================================================================
+                // KNIGHT: ARMORED DESTRIER WARHORSE & MOUNTED GOTHIC CAVALIER
+                // =========================================================================
+                // 4 Articulated Equine Legs (Rear legs anchored, forelegs poised in heroic battle stance)
+                extraLimbs.legs = [];
+                const horseLegs = [
+                    { x: -0.12, y: 0.16, z: -0.16, rear: true },
+                    { x: 0.12, y: 0.16, z: -0.16, rear: true },
+                    { x: -0.12, y: 0.22, z: 0.18, rear: false },
+                    { x: 0.12, y: 0.22, z: 0.18, rear: false }
+                ];
+                horseLegs.forEach((hl, idx) => {
+                    const lGroup = new THREE.Group();
+                    lGroup.position.set(hl.x, hl.y, hl.z);
+                    const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.058, 0.042, 0.22, 10), stoneMat);
+                    thigh.position.y = 0.14;
+                    thigh.rotation.x = hl.rear ? 0.22 : -0.35;
+
+                    const cannon = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.034, 0.18, 10), stoneMat);
+                    cannon.position.set(0, 0.02, hl.rear ? -0.03 : 0.05);
+                    cannon.rotation.x = hl.rear ? -0.15 : 0.45;
+
+                    const hoof = new THREE.Mesh(new THREE.CylinderGeometry(0.038, 0.048, 0.05, 10), trimMat);
+                    hoof.position.set(0, -0.06, hl.rear ? -0.02 : 0.08);
+
+                    lGroup.add(thigh, cannon, hoof);
+                    bodyGroup.add(lGroup);
+                    extraLimbs.legs.push(lGroup);
+                });
+
+                // Muscular Equine Barrel, Chest & Crupper Barding Armor
+                const horseBarrel = new THREE.Mesh(new THREE.SphereGeometry(0.20, 18, 16), stoneMat);
+                horseBarrel.scale.set(0.92, 0.95, 1.55);
+                horseBarrel.position.set(0, 0.46, -0.02);
+                horseBarrel.rotation.x = -0.18;
+                horseBarrel.castShadow = true;
+                bodyGroup.add(horseBarrel);
+
+                const chest = new THREE.Mesh(new THREE.SphereGeometry(0.19, 16, 16), stoneMat);
+                chest.scale.set(1.02, 1.08, 0.95);
+                chest.position.set(0, 0.52, 0.16);
+                bodyGroup.add(chest);
+
+                // Fluted Barding Peytral (Chest Armor) & Crupper
+                const peytral = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.22, 0.22, 12, 1, true, -Math.PI / 2, Math.PI), trimMat);
+                peytral.position.set(0, 0.50, 0.17);
+                bodyGroup.add(peytral);
+
+                // Flowing Sculpted Tail
+                const tail = new THREE.Mesh(new THREE.ConeGeometry(0.065, 0.36, 10), stoneMat);
+                tail.position.set(0, 0.36, -0.34);
+                tail.rotation.x = 2.65;
+                bodyGroup.add(tail);
+
+                // Arched Muscular Equine Neck, Braided Mane & Armored Destrier Head
+                const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.15, 0.36, 14), stoneMat);
+                neck.position.set(0, 0.72, 0.20);
+                neck.rotation.x = 0.42;
+                neck.castShadow = true;
+                bodyGroup.add(neck);
+
+                // Crinet (Articulated Neck Armor Plates)
+                for (let c = 0; c < 4; c++) {
+                    const plate = new THREE.Mesh(new THREE.TorusGeometry(0.11 - c * 0.006, 0.015, 6, 12, Math.PI), trimMat);
+                    plate.position.set(0, 0.62 + c * 0.065, 0.16 + c * 0.025);
+                    plate.rotation.x = 1.2;
+                    bodyGroup.add(plate);
+                }
+
+                headGroup.position.set(0, 0.88, 0.28);
+                const horseSkull = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 14), stoneMat);
+                const muzzle = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.095, 0.26, 12), stoneMat);
+                muzzle.rotation.x = Math.PI / 2.6;
+                muzzle.position.set(0, -0.05, 0.12);
+
+                // Steel Chanfron Faceplate
+                const horseChanfron = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.24, 0.03), trimMat);
+                horseChanfron.rotation.x = -0.68;
+                horseChanfron.position.set(0, 0.01, 0.13);
+
+                // Alert Pricked Equine Ears
+                const earL = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.10, 8), stoneMat);
+                earL.position.set(-0.055, 0.12, -0.02);
+                earL.rotation.x = 0.2;
+                const earR = earL.clone();
+                earR.position.x = 0.055;
+
+                headGroup.add(horseSkull, muzzle, horseChanfron, earL, earR);
+                addShadowedVisorEyes(headGroup, relicMat, 0.01, 0.09, 0.075);
+
+                // Mounted Plate-Armored Cavalier Rider in High Saddle
+                const riderGroup = new THREE.Group();
+                riderGroup.position.set(0, 0.62, -0.04);
+
+                const cuirass = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.10, 0.28, 12), steelMat);
+                cuirass.position.y = 0.18;
+                cuirass.castShadow = true;
+
+                const pauldronL = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 10), trimMat);
+                pauldronL.position.set(-0.14, 0.28, 0);
+                const pauldronR = pauldronL.clone();
+                pauldronR.position.x = 0.14;
+
+                // Cavalier Sallet/Armet Helmet with Pointed Bevor Visor
+                const helm = new THREE.Mesh(new THREE.SphereGeometry(0.095, 14, 14), steelMat);
+                helm.position.set(0, 0.39, 0);
+                const visor = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.12, 6), trimMat);
+                visor.rotation.x = Math.PI / 2;
+                visor.position.set(0, 0.38, 0.07);
+
+                // Flowing Plume Crest
+                const plume = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.22, 8), stoneMat);
+                plume.position.set(0, 0.48, -0.06);
+                plume.rotation.x = -0.65;
+
+                // Left Arm Heater Shield
+                const heaterShield = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.02, 0.28, 4), trimMat);
+                heaterShield.scale.set(1.0, 1.0, 0.25);
+                heaterShield.position.set(-0.18, 0.18, 0.08);
+                heaterShield.rotation.y = -0.4;
+
+                riderGroup.add(cuirass, pauldronL, pauldronR, helm, visor, plume, heaterShield);
+                bodyGroup.add(riderGroup);
+
+                // Right Arm Couched Heavy Tournament War-Lance with Vamplate
+                weaponGroup.position.set(0.18, 0.78, 0.06);
+                const vamplate = new THREE.Mesh(new THREE.ConeGeometry(0.085, 0.12, 12), trimMat);
+                vamplate.rotation.x = Math.PI / 2;
+                vamplate.position.z = 0.10;
+
+                const lanceShaft = new THREE.Mesh(new THREE.ConeGeometry(0.042, 0.88, 12), steelMat);
+                lanceShaft.rotation.x = Math.PI / 2.15;
+                lanceShaft.position.set(0, 0.04, 0.46);
+                lanceShaft.castShadow = true;
+
+                weaponGroup.add(vamplate, lanceShaft);
+
+            } else if (type === 'b') {
+                // =========================================================================
+                // BISHOP: HIGH CATHEDRAL INQUISITOR / ARCH-PRELATE (8-Head Canon)
+                // =========================================================================
+                // Sculpted Flowing Liturgical Cassock & Fluted Folds (Lathe Profile)
+                const robePts = [
+                    new THREE.Vector2(0.0, 0.16),
+                    new THREE.Vector2(0.31, 0.16),
+                    new THREE.Vector2(0.26, 0.38),
+                    new THREE.Vector2(0.21, 0.65),
+                    new THREE.Vector2(0.16, 0.88),
+                    new THREE.Vector2(0.20, 1.02),
+                    new THREE.Vector2(0.0, 1.02)
+                ];
+                const robeMesh = new THREE.Mesh(new THREE.LatheGeometry(robePts, 20), stoneMat);
+                robeMesh.castShadow = true;
+                robeMesh.receiveShadow = true;
+                bodyGroup.add(robeMesh);
+
+                // Vertical Sculpted Drapery Flutes
+                for (let f = 0; f < 8; f++) {
+                    const ang = (f * Math.PI) / 4;
+                    const fold = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.032, 0.72, 8), stoneMat);
+                    fold.position.set(Math.cos(ang) * 0.21, 0.52, Math.sin(ang) * 0.21);
+                    fold.rotation.z = Math.cos(ang) * 0.12;
+                    fold.rotation.x = -Math.sin(ang) * 0.12;
+                    bodyGroup.add(fold);
+                }
+
+                // Embroidered Gold/Bronze Stole & Mantilla Shoulder Cape
+                const mantilla = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.23, 0.24, 16), trimMat);
+                mantilla.position.y = 0.94;
+                const stoleL = new THREE.Mesh(new THREE.BoxGeometry(0.045, 0.62, 0.02), trimMat);
+                stoleL.position.set(-0.065, 0.62, 0.19);
+                stoleL.rotation.x = -0.14;
+                const stoleR = stoleL.clone();
+                stoleR.position.x = 0.065;
+                bodyGroup.add(mantilla, stoleL, stoleR);
+
+                // Inquisitor Head, Sculpted Beard, Shadowed Hood & High Gothic Mitre
+                headGroup.position.set(0, 1.12, 0);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 16), stoneMat);
+                head.scale.set(0.92, 1.12, 0.98);
+                const beard = new THREE.Mesh(new THREE.ConeGeometry(0.075, 0.18, 10), stoneMat);
+                beard.rotation.x = Math.PI;
+                beard.position.set(0, -0.09, 0.04);
+
+                // Split-Peak Gothic Mitre Hat with Gold Filigree
+                const mitreBand = new THREE.Mesh(new THREE.CylinderGeometry(0.115, 0.11, 0.06, 16), trimMat);
+                mitreBand.position.y = 0.06;
+                const mitreFront = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.28, 4), stoneMat);
+                mitreFront.position.set(0, 0.21, 0.02);
+                mitreFront.rotation.y = Math.PI / 4;
+                const mitreCross = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.18, 0.02), trimMat);
+                mitreCross.position.set(0, 0.20, 0.08);
+
+                headGroup.add(head, beard, mitreBand, mitreFront, mitreCross);
+                addShadowedVisorEyes(headGroup, relicMat, 0.0, 0.092, 0.036);
+
+                // Left Hand: Swinging Incense Censer on Chain
+                const censerGroup = new THREE.Group();
+                censerGroup.position.set(-0.22, 0.86, 0.12);
+                const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.26, 6), steelMat);
+                chain.position.y = -0.13;
+                const thurible = new THREE.Mesh(new THREE.OctahedronGeometry(0.065, 1), trimMat);
+                thurible.position.y = -0.28;
+                const emberCore = new THREE.Mesh(new THREE.SphereGeometry(0.035, 8, 8), relicMat);
+                emberCore.position.y = -0.28;
+                censerGroup.add(chain, thurible, emberCore);
+                bodyGroup.add(censerGroup);
+                extraLimbs.censer = censerGroup;
+
+                // Right Hand: Ornate Gothic Shepherd's Crosier Staff with Floating Relic
+                weaponGroup.position.set(0.22, 0.68, 0.10);
+                const staffShaft = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.018, 1.18, 10), steelMat);
+                staffShaft.position.y = 0.05;
+                staffShaft.castShadow = true;
+
+                const crook = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.018, 10, 24, Math.PI * 1.65), trimMat);
+                crook.position.set(0, 0.72, 0.02);
+                crook.rotation.y = Math.PI / 2;
+
+                const relicCrystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.048, 0), relicMat);
+                relicCrystal.position.set(0, 0.72, 0.02);
+
+                weaponGroup.add(staffShaft, crook, relicCrystal);
+                extraLimbs.relicCrystal = relicCrystal;
+
+            } else if (type === 'q') {
+                // =========================================================================
+                // QUEEN: GOTHIC BATTLE-EMPRESS (Fluted Cuirass, Sculpted Cloak, Longsword & Orb)
+                // =========================================================================
+                // Flowing Sculpted Stone Gown & Armored Tassets (Tall Slender Proportions)
+                const skirtPts = [
+                    new THREE.Vector2(0.0, 0.16),
+                    new THREE.Vector2(0.33, 0.16),
+                    new THREE.Vector2(0.27, 0.42),
+                    new THREE.Vector2(0.19, 0.70),
+                    new THREE.Vector2(0.13, 0.84),
+                    new THREE.Vector2(0.18, 1.06),
+                    new THREE.Vector2(0.0, 1.06)
+                ];
+                const gownMesh = new THREE.Mesh(new THREE.LatheGeometry(skirtPts, 24), stoneMat);
+                gownMesh.castShadow = true;
+                gownMesh.receiveShadow = true;
+                bodyGroup.add(gownMesh);
+
+                // Fluted Gothic Plate Cuirass & Gorget
+                const cuirass = new THREE.Mesh(new THREE.CylinderGeometry(0.165, 0.125, 0.28, 16), trimMat);
+                cuirass.position.y = 0.94;
+                cuirass.castShadow = true;
+                bodyGroup.add(cuirass);
+
+                // Sweeping High-Collared Imperial Mantle Cloak
+                const cloak = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.34, 0.88, 18, 1, true, Math.PI * 0.55, Math.PI * 0.9), stoneMat);
+                cloak.position.set(0, 0.62, -0.02);
+                cloak.castShadow = true;
+                bodyGroup.add(cloak);
+
+                const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.20, 0.15, 0.16, 14, 1, true, Math.PI * 0.6, Math.PI * 0.8), trimMat);
+                collar.position.set(0, 1.12, -0.03);
+                bodyGroup.add(collar);
+
+                // Sculpted Empress Head & Intricate Spiked Imperial Crown
+                headGroup.position.set(0, 1.20, 0);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.102, 18, 18), stoneMat);
+                head.scale.set(0.92, 1.12, 0.96);
+                headGroup.add(head);
+
+                const crownRing = new THREE.Mesh(new THREE.TorusGeometry(0.095, 0.015, 8, 20), trimMat);
+                crownRing.rotation.x = Math.PI / 2;
+                crownRing.position.y = 0.08;
+                headGroup.add(crownRing);
+
+                for (let s = 0; s < 8; s++) {
+                    const ang = (s * Math.PI) / 4;
+                    const spikeH = s % 2 === 0 ? 0.14 : 0.09;
+                    const spike = new THREE.Mesh(new THREE.ConeGeometry(0.016, spikeH, 6), trimMat);
+                    spike.position.set(Math.cos(ang) * 0.095, 0.08 + spikeH / 2, Math.sin(ang) * 0.095);
+                    headGroup.add(spike);
+                }
+                addShadowedVisorEyes(headGroup, relicMat, 0.005, 0.09, 0.035);
+
+                // Left Hand: Levitating Sovereign Orb & Scepter
+                const orbGroup = new THREE.Group();
+                orbGroup.position.set(-0.24, 0.96, 0.14);
+                const orbCore = new THREE.Mesh(new THREE.SphereGeometry(0.055, 14, 14), relicMat);
+                const orbCage1 = new THREE.Mesh(new THREE.TorusGeometry(0.072, 0.008, 8, 20), trimMat);
+                const orbCage2 = orbCage1.clone();
+                orbCage2.rotation.y = Math.PI / 2;
+                orbGroup.add(orbCore, orbCage1, orbCage2);
+                bodyGroup.add(orbGroup);
+                extraLimbs.orbGroup = orbGroup;
+
+                // Right Hand: Ornate Flamberge / Gothic Longsword
+                weaponGroup.position.set(0.23, 0.88, 0.12);
+                const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.025, 8, 8), trimMat);
+                pommel.position.y = -0.14;
+                const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.14, 8), stoneMat);
+                grip.position.y = -0.06;
+                const crossguard = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.022, 0.03), trimMat);
+                const blade = new THREE.Mesh(new THREE.ConeGeometry(0.036, 0.76, 4), steelMat);
+                blade.scale.set(1.0, 1.0, 0.25);
+                blade.position.y = 0.38;
+                blade.castShadow = true;
+
+                weaponGroup.add(pommel, grip, crossguard, blade);
+                weaponGroup.rotation.x = 0.35;
+                weaponGroup.rotation.z = -0.15;
+
+            } else if (type === 'k') {
+                // =========================================================================
+                // KING: HIGH SOVEREIGN MONARCH (Broad Gothic Plate, Mantle & Greatsword)
+                // =========================================================================
+                // Imposing Armored Greaves, Tassets & Broad Cuirass
+                const lowerArmor = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.31, 0.56, 18), stoneMat);
+                lowerArmor.position.y = 0.44;
+                lowerArmor.castShadow = true;
+                bodyGroup.add(lowerArmor);
+
+                const breastplate = new THREE.Mesh(new THREE.CylinderGeometry(0.24, 0.19, 0.42, 16), steelMat);
+                breastplate.position.y = 0.88;
+                breastplate.castShadow = true;
+                bodyGroup.add(breastplate);
+
+                // Heavy Layered Pauldrons & Fur-Trimmed Sovereign Mantle
+                const mantle = new THREE.Mesh(new THREE.CylinderGeometry(0.27, 0.37, 0.96, 18, 1, true, Math.PI * 0.45, Math.PI * 1.1), stoneMat);
+                mantle.position.set(0, 0.64, -0.03);
+                mantle.castShadow = true;
+                bodyGroup.add(mantle);
+
+                [-1, 1].forEach(dir => {
+                    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.125, 14, 14), trimMat);
+                    pauldron.scale.set(1.15, 0.85, 1.0);
+                    pauldron.position.set(dir * 0.24, 1.06, 0.0);
+                    bodyGroup.add(pauldron);
+                });
+
+                // Sovereign Bearded Visage & Towering Cross-Arched Imperial Crown
+                headGroup.position.set(0, 1.24, 0);
+                const head = new THREE.Mesh(new THREE.SphereGeometry(0.115, 16, 16), stoneMat);
+                const royalBeard = new THREE.Mesh(new THREE.ConeGeometry(0.095, 0.20, 10), stoneMat);
+                royalBeard.rotation.x = Math.PI;
+                royalBeard.position.set(0, -0.09, 0.045);
+
+                const crownCirclet = new THREE.Mesh(new THREE.CylinderGeometry(0.125, 0.115, 0.10, 16), trimMat);
+                crownCirclet.position.y = 0.09;
+                const crownArch1 = new THREE.Mesh(new THREE.TorusGeometry(0.115, 0.016, 8, 16, Math.PI), trimMat);
+                crownArch1.position.y = 0.13;
+                const crownArch2 = crownArch1.clone();
+                crownArch2.rotation.y = Math.PI / 2;
+
+                const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.032, 0.16, 0.032), trimMat);
+                crossV.position.y = 0.30;
+                const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.032, 0.032), trimMat);
+                crossH.position.y = 0.31;
+
+                headGroup.add(head, royalBeard, crownCirclet, crownArch1, crownArch2, crossV, crossH);
+                addShadowedVisorEyes(headGroup, relicMat, 0.005, 0.102, 0.04);
+
+                // Colossal Two-Handed Broadsword (Resting point-down on pedestal; lifts to cleave!)
+                weaponGroup.position.set(0, 0.88, 0.25);
+                const pommel = new THREE.Mesh(new THREE.OctahedronGeometry(0.038, 0), trimMat);
+                pommel.position.y = 0.18;
+                const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.22, 10), stoneMat);
+                grip.position.y = 0.05;
+                const guard = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.032, 0.045), trimMat);
+                guard.position.y = -0.05;
+
+                // Gauntleted Hands Clasped on Broadsword Hilt
+                const gauntlets = new THREE.Mesh(new THREE.SphereGeometry(0.045, 10, 10), trimMat);
+                gauntlets.position.y = 0.04;
+
+                const greatBlade = new THREE.Mesh(new THREE.BoxGeometry(0.085, 0.68, 0.022), steelMat);
+                greatBlade.position.y = -0.39;
+                greatBlade.castShadow = true;
+
+                const fuller = new THREE.Mesh(new THREE.BoxGeometry(0.022, 0.56, 0.026), trimMat);
+                fuller.position.y = -0.36;
+
+                weaponGroup.add(pommel, grip, guard, gauntlets, greatBlade, fuller);
+
+            } else if (type === 'p') {
+                // =========================================================================
+                // PAWN: HEAVY INFANTRY HALBERDIER / CATHEDRAL GUARD (Realistic Foot Soldier)
+                // =========================================================================
+                // Armored Greaves & Surcoat
+                const legs = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.18, 0.34, 14), stoneMat);
+                legs.position.y = 0.33;
+                legs.castShadow = true;
+                bodyGroup.add(legs);
+
+                // Steel Breastplate & Chainmail Fauld
+                const cuirass = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.135, 0.28, 14), steelMat);
+                cuirass.position.y = 0.60;
+                cuirass.castShadow = true;
+                bodyGroup.add(cuirass);
+
+                const pauldronL = new THREE.Mesh(new THREE.SphereGeometry(0.075, 10, 10), trimMat);
+                pauldronL.position.set(-0.17, 0.70, 0);
+                const pauldronR = pauldronL.clone();
+                pauldronR.position.x = 0.17;
+                bodyGroup.add(pauldronL, pauldronR);
+
+                // Barbute / Sallet Infantry Helmet with T-Visor
+                headGroup.position.set(0, 0.84, 0);
+                const helm = new THREE.Mesh(new THREE.SphereGeometry(0.105, 16, 16), steelMat);
+                helm.scale.set(0.95, 1.12, 1.02);
+                const helmCrest = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.08, 0.18), trimMat);
+                helmCrest.position.y = 0.09;
+                headGroup.add(helm, helmCrest);
+                addShadowedVisorEyes(headGroup, relicMat, 0.0, 0.096, 0.034);
+
+                // Left Arm: Heavy Gothic Kite Shield with Heraldic Boss
+                const shieldGroup = new THREE.Group();
+                shieldGroup.position.set(-0.20, 0.54, 0.13);
+                shieldGroup.rotation.y = -0.28;
+
+                const kiteShield = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.04, 0.44, 4), stoneMat);
+                kiteShield.scale.set(1.0, 1.0, 0.22);
+                kiteShield.castShadow = true;
+
+                const shieldRim = new THREE.Mesh(new THREE.BoxGeometry(0.19, 0.42, 0.025), trimMat);
+                const shieldCross = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.03, 0.04), steelMat);
+                shieldCross.position.set(0, 0.06, 0.015);
+
+                shieldGroup.add(kiteShield, shieldRim, shieldCross);
+                bodyGroup.add(shieldGroup);
+                extraLimbs.shield = shieldGroup;
+
+                // Right Arm: Steel Halberd (Long Pole, Axe Blade, Back Spike & Spear Tip)
+                weaponGroup.position.set(0.20, 0.56, 0.08);
+                const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.016, 0.018, 0.96, 8), stoneMat);
+                pole.position.y = 0.12;
+                pole.castShadow = true;
+
+                const spearPoint = new THREE.Mesh(new THREE.ConeGeometry(0.028, 0.20, 6), steelMat);
+                spearPoint.position.y = 0.66;
+
+                const axeBlade = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 0.018, 8, 1, false, 0, Math.PI), steelMat);
+                axeBlade.rotation.z = Math.PI / 2;
+                axeBlade.position.set(0, 0.48, 0.04);
+
+                const backFluke = new THREE.Mesh(new THREE.ConeGeometry(0.025, 0.10, 6), trimMat);
+                backFluke.rotation.x = -Math.PI / 2;
+                backFluke.position.set(0, 0.48, -0.05);
+
+                weaponGroup.add(pole, spearPoint, axeBlade, backFluke);
+            }
+
+            // Default Facing Direction: White faces North (-Z, Math.PI), Black faces South (+Z, 0)
+            const defaultYaw = isWhite ? Math.PI : 0;
+            charRig.rotation.y = defaultYaw;
+
+            root.userData = {
+                type,
+                color,
+                charRig,
+                bodyGroup,
+                headGroup,
+                weaponGroup,
+                extraLimbs,
+                defaultYaw,
+                phaseOffset: Math.random() * Math.PI * 2
+            };
+            return root;
+        }
+
+        /***********************************************************************
+         * 6. SHATTER PARTICLE SYSTEM, STONE DUST PUFFS & GOTHIC COMBAT HERALDRY
+         ***********************************************************************/
+        const activeDebris = [];
+        let currentAnimation = null;
+        let screenShakeTime = 0;
+
+        function triggerCombatHerald(title, subtitle = '', isWhiteAttacker = true) {
+            const layer = document.getElementById('combat-herald-layer');
+            const flash = document.getElementById('impact-flash');
+            flash.style.opacity = '0.55';
+            setTimeout(() => { flash.style.opacity = '0'; }, 110);
+
+            const banner = document.createElement('div');
+            banner.className = `absolute left-1/2 top-1/4 gothic-banner-anim text-center pointer-events-none select-none`;
+            const titleColor = isWhiteAttacker ? 'text-amber-200' : 'text-rose-300';
+            banner.innerHTML = `
+                <div class="px-6 py-2.5 rounded-2xl bg-black/80 border border-amber-400/40 shadow-2xl backdrop-blur-md">
+                    <div class="font-gothic text-xl sm:text-3xl font-extrabold tracking-widest ${titleColor} drop-shadow">${title}</div>
+                    ${subtitle ? `<div class="text-[11px] font-sans font-semibold uppercase tracking-widest text-slate-300 mt-0.5">${subtitle}</div>` : ''}
+                </div>
+            `;
+            layer.appendChild(banner);
+            setTimeout(() => banner.remove(), 1400);
+        }
+
+        function spawnStoneDustPuff(worldPos, count = 8) {
+            const dustMat = new THREE.MeshBasicMaterial({
+                color: 0xd6d3c9,
+                transparent: true,
+                opacity: 0.45
+            });
+            for (let i = 0; i < count; i++) {
+                const puff = new THREE.Mesh(new THREE.DodecahedronGeometry(0.06 + Math.random() * 0.06, 0), dustMat.clone());
+                puff.position.set(
+                    worldPos.x + (Math.random() - 0.5) * 0.35,
+                    0.05 + Math.random() * 0.08,
+                    worldPos.z + (Math.random() - 0.5) * 0.35
+                );
+                scene.add(puff);
+                const angle = Math.random() * Math.PI * 2;
+                const spd = 0.4 + Math.random() * 0.9;
+                activeDebris.push({
+                    mesh: puff,
+                    isDust: true,
+                    vel: new THREE.Vector3(Math.cos(angle) * spd, 0.35 + Math.random() * 0.5, Math.sin(angle) * spd),
+                    life: 0.75
+                });
+            }
+        }
+
+        function spawnShatterEffect(worldPos, victimColor, attackerType) {
+            soundFX.playShatter();
+            const isVictimWhite = victimColor === 'w';
+            const stoneMat = isVictimWhite ? whiteMarbleMat : blackObsidianMat;
+            const trimMat = isVictimWhite ? antiqueGoldMat : crimsonBronzeMat;
+
+            const heraldNames = {
+                r: ['WAR ELEPHANT TRAMPLE', 'Ivory Tusks & Stone Crush'],
+                n: ['DESTRIER LANCE IMPALE', 'Heavy Cavalry Charge'],
+                b: ['INQUISITOR JUDGEMENT', 'Sanctum Relic Obliteration'],
+                q: ['EMPRESS BLADE CLEAVE', 'Sovereign Execution'],
+                k: ['MONARCH GREATSWORD CRUSH', 'Royal Decree'],
+                p: ['HALBERDIER POLEARM STRIKE', 'Infantry Breach']
+            };
+            const [mainHerald, subHerald] = heraldNames[attackerType] || ['STONE SHATTERED', 'Direct Strike'];
+            triggerCombatHerald(mainHerald, subHerald, !isVictimWhite);
+
+            // Spawn stone dust cloud on impact
+            spawnStoneDustPuff(worldPos, 18);
+
+            // 46 Asymmetric Jagged Voronoi-like Stone & Metal Armor Shards
+            const shardGeo = new THREE.DodecahedronGeometry(0.13, 0);
+            for (let i = 0; i < 46; i++) {
+                const mat = i % 4 === 0 ? trimMat : (i % 7 === 0 ? forgedSteelMat : stoneMat);
+                const mesh = new THREE.Mesh(shardGeo, mat);
+                mesh.position.set(
+                    worldPos.x + (Math.random() - 0.5) * 0.42,
+                    0.25 + Math.random() * 0.95,
+                    worldPos.z + (Math.random() - 0.5) * 0.42
+                );
+                // Non-uniform scaling for realistic fractured rock/stone splinters
+                mesh.scale.set(
+                    0.35 + Math.random() * 1.15,
+                    0.25 + Math.random() * 0.95,
+                    0.40 + Math.random() * 1.20
+                );
+                mesh.castShadow = true;
+                scene.add(mesh);
+
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 1.6 + Math.random() * 4.4;
+                activeDebris.push({
+                    mesh,
+                    vel: new THREE.Vector3(
+                        Math.cos(angle) * speed,
+                        2.5 + Math.random() * 4.2,
+                        Math.sin(angle) * speed
+                    ),
+                    rotVel: new THREE.Vector3(
+                        (Math.random() - 0.5) * 14,
+                        (Math.random() - 0.5) * 14,
+                        (Math.random() - 0.5) * 14
+                    ),
+                    life: 1.25
+                });
+            }
+
+            // Ground Shockwave Ring
+            const ringGeo = new THREE.RingGeometry(0.14, 0.28, 32);
+            const ringMat = new THREE.MeshBasicMaterial({
+                color: isVictimWhite ? 0xd4af37 : 0xe11d48,
+                side: THREE.DoubleSide,
+                transparent: true,
+                opacity: 0.85
+            });
+            const ring = new THREE.Mesh(ringGeo, ringMat);
+            ring.rotation.x = Math.PI / 2;
+            ring.position.set(worldPos.x, 0.03, worldPos.z);
+            scene.add(ring);
+            activeDebris.push({ mesh: ring, isShockwave: true, life: 1.0 });
+        }
+
+        function spawnCathedralLightStrike(fromPos, toPos, moverColor) {
+            const beamMat = new THREE.MeshBasicMaterial({
+                color: moverColor === 'w' ? 0xfef08a : 0xf43f5e,
+                transparent: true,
+                opacity: 0.9
+            });
+            // Vertical Pillar of Sanctum Light / Ember striking target
+            const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.32, 6.5, 16), beamMat);
+            pillar.position.set(toPos.x, 3.25, toPos.z);
+            scene.add(pillar);
+            activeDebris.push({ mesh: pillar, isShockwave: true, life: 0.7 });
+        }
+
+        function updateDebris(dt) {
+            for (let i = activeDebris.length - 1; i >= 0; i--) {
+                const item = activeDebris[i];
+                if (item.isShockwave) {
+                    item.life -= dt * 2.1;
+                    const s = 1 + (1 - item.life) * 3.8;
+                    item.mesh.scale.set(s, s, 1);
+                    item.mesh.material.opacity = Math.max(0, item.life);
+                    if (item.life <= 0) {
+                        scene.remove(item.mesh);
+                        activeDebris.splice(i, 1);
+                    }
+                    continue;
+                }
+
+                if (item.isDust) {
+                    item.life -= dt * 1.1;
+                    item.mesh.position.addScaledVector(item.vel, dt);
+                    item.mesh.scale.multiplyScalar(1.03);
+                    item.mesh.material.opacity = Math.max(0, item.life * 0.5);
+                    if (item.life <= 0) {
+                        scene.remove(item.mesh);
+                        activeDebris.splice(i, 1);
+                    }
+                    continue;
+                }
+
+                item.life -= dt * 0.58;
+                item.vel.y -= 14.5 * dt;
+                item.mesh.position.addScaledVector(item.vel, dt);
+                item.mesh.rotation.x += item.rotVel.x * dt;
+                item.mesh.rotation.y += item.rotVel.y * dt;
+                item.mesh.rotation.z += item.rotVel.z * dt;
+
+                if (item.mesh.position.y < 0.05) {
+                    item.mesh.position.y = 0.05;
+                    item.vel.y *= -0.38;
+                    item.vel.x *= 0.70;
+                    item.vel.z *= 0.70;
+                }
+
+                if (item.life < 0.3) {
+                    item.mesh.scale.multiplyScalar(0.90);
+                }
+
+                if (item.life <= 0) {
+                    scene.remove(item.mesh);
+                    activeDebris.splice(i, 1);
+                }
+            }
+        }
+
+        /***********************************************************************
+         * 7. CHESS GAME STATE, CLOCKS, VALIDATION & PVP / AI MODES
+         ***********************************************************************/
+        const chess = new Chess();
+        const pieceMeshes = {};
+        let selectedSquare = null;
+        let legalMovesForSelected = [];
+
+        let gameMode = 'ai';
+        let autoFlipCamera = false;
+        let pendingPromotionMove = null;
+        let lastMoveSquares = null;
+
+        let clockWhite = 600;
+        let clockBlack = 600;
+
+        // Online PvP State (Supports both PeerJS WebRTC & Firestore Cloud Sync)
+        let db = null;
+        let auth = null;
+        let currentUser = null;
+        let activeRoomId = null;
+        let myOnlineColor = 'w';
+        let roomUnsubscribe = null;
+        let peerInstance = null;
+        let peerConn = null;
+        let lastSyncedEmoteId = null;
+        let lastResetCounter = 0;
+
+        const unicodePieces = { p: '♟', n: '♞', b: '♝', r: '♜', q: '♛', k: '♚' };
+
+        function syncBoardMeshesFull() {
+            Object.keys(pieceMeshes).forEach(sq => {
+                scene.remove(pieceMeshes[sq]);
+                delete pieceMeshes[sq];
+            });
+
+            const board = chess.board();
+            for (let r = 0; r < 8; r++) {
+                for (let f = 0; f < 8; f++) {
+                    const cell = board[r][f];
+                    if (cell) {
+                        const sq = files[f] + (8 - r);
+                        const mesh = createRealisticSculptedPiece(cell.type, cell.color);
+                        mesh.position.copy(squareToWorld(sq));
+                        mesh.userData.square = sq;
+                        scene.add(mesh);
+                        pieceMeshes[sq] = mesh;
+                    }
+                }
+            }
+            clearHighlights();
+            renderLastMoveBoxes();
+            updateHUD();
+        }
+
+        function clearHighlights() {
+            highlightMeshes.forEach(m => scene.remove(m));
+            highlightMeshes.length = 0;
+        }
+
+        function renderLastMoveBoxes() {
+            lastMoveMeshes.forEach(m => scene.remove(m));
+            lastMoveMeshes.length = 0;
+            if (!lastMoveSquares) return;
+
+            [lastMoveSquares.from, lastMoveSquares.to].forEach(sq => {
+                const pos = squareToWorld(sq);
+                const box = createSquareBoxFrame(0xd4af37, 0.92, 0.04, 0.02);
+                box.position.set(pos.x, 0.012, pos.z);
+                scene.add(box);
+                lastMoveMeshes.push(box);
+            });
+        }
+
+        function showLegalHighlights(square, moves) {
+            clearHighlights();
+
+            const selPos = squareToWorld(square);
+            const selBox = createSquareBoxFrame(0xfacc15, 0.94, 0.065, 0.04);
+            selBox.position.set(selPos.x, 0.015, selPos.z);
+            scene.add(selBox);
+            highlightMeshes.push(selBox);
+
+            moves.forEach(m => {
+                const targetPos = squareToWorld(m.to);
+                const isCapture = m.flags.includes('c') || m.flags.includes('e');
+
+                const boxColor = isCapture ? 0xf43f5e : 0x10b981;
+                const boxFrame = createSquareBoxFrame(boxColor, 0.92, isCapture ? 0.075 : 0.055, 0.035);
+                boxFrame.position.set(targetPos.x, 0.015, targetPos.z);
+                scene.add(boxFrame);
+                highlightMeshes.push(boxFrame);
+
+                const centerGeo = isCapture
+                    ? new THREE.RingGeometry(0.22, 0.30, 20)
+                    : new THREE.BoxGeometry(0.20, 0.02, 0.20);
+                const centerMat = new THREE.MeshBasicMaterial({
+                    color: boxColor,
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0.78
+                });
+                const centerMesh = new THREE.Mesh(centerGeo, centerMat);
+                if (isCapture) centerMesh.rotation.x = Math.PI / 2;
+                centerMesh.position.set(targetPos.x, 0.02, targetPos.z);
+                scene.add(centerMesh);
+                highlightMeshes.push(centerMesh);
+            });
+        }
+
+        function executeMoveAnimated(moveObj, isRemoteSync = false) {
+            clearHighlights();
+            selectedSquare = null;
+            legalMovesForSelected = [];
+
+            const result = chess.move(moveObj);
+            if (!result) return;
+
+            lastMoveSquares = { from: result.from, to: result.to };
+            renderLastMoveBoxes();
+
+            const attackerMesh = pieceMeshes[result.from];
+            let victimSquare = result.to;
+
+            if (result.flags.includes('e')) {
+                victimSquare = result.to[0] + result.from[1];
+            }
+
+            const victimMesh = pieceMeshes[victimSquare];
+            const startPos = squareToWorld(result.from);
+            const endPos = squareToWorld(result.to);
+
+            const isCapture = Boolean(victimMesh);
+            const animStatusEl = document.getElementById('anim-status');
+            animStatusEl.innerHTML = isCapture
+                ? `<span class="w-2 h-2 rounded-full bg-rose-500 animate-ping"></span> Combat Engagement!`
+                : `<span class="w-2 h-2 rounded-full bg-amber-400 animate-ping"></span> Marching...`;
+
+            if (!isCapture) {
+                soundFX.playMove(result.piece);
+                spawnStoneDustPuff(startPos, 5);
+            }
+
+            if (attackerMesh && attackerMesh.userData.charRig) {
+                const dx = endPos.x - startPos.x;
+                const dz = endPos.z - startPos.z;
+                attackerMesh.userData.charRig.rotation.y = Math.atan2(dx, dz);
+            }
+
+            delete pieceMeshes[result.from];
+            if (victimMesh && victimSquare !== result.to) {
+                delete pieceMeshes[victimSquare];
+            }
+            pieceMeshes[result.to] = attackerMesh;
+            if (attackerMesh) attackerMesh.userData.square = result.to;
+
+            let rookAnim = null;
+            if (result.flags.includes('k') || result.flags.includes('q')) {
+                const rank = result.color === 'w' ? '1' : '8';
+                const rookFrom = result.flags.includes('k') ? 'h' + rank : 'a' + rank;
+                const rookTo = result.flags.includes('k') ? 'f' + rank : 'd' + rank;
+                const rMesh = pieceMeshes[rookFrom];
+                if (rMesh) {
+                    delete pieceMeshes[rookFrom];
+                    pieceMeshes[rookTo] = rMesh;
+                    rMesh.userData.square = rookTo;
+                    rookAnim = {
+                        mesh: rMesh,
+                        from: squareToWorld(rookFrom),
+                        to: squareToWorld(rookTo)
+                    };
+                }
+            }
+
+            currentAnimation = {
+                attacker: attackerMesh,
+                attackerType: result.piece,
+                victim: victimMesh,
+                victimColor: result.color === 'w' ? 'b' : 'w',
+                startPos,
+                endPos,
+                isCapture,
+                promotedTo: result.promotion || null,
+                moverColor: result.color,
+                targetSquare: result.to,
+                rookAnim,
+                elapsed: 0,
+                duration: isCapture ? 1.15 : 0.65,
+                shattered: false,
+                lastDustStep: 0
+            };
+
+            if (gameMode === 'online' && !isRemoteSync && activeRoomId) {
+                pushMoveToOnlineRoom(result);
+            }
+        }
+
+        function finalizeMoveAfterAnimation(anim) {
+            if (anim.attacker && anim.attacker.userData.charRig) {
+                const ud = anim.attacker.userData;
+                ud.charRig.rotation.y = ud.defaultYaw;
+                ud.bodyGroup.rotation.set(0, 0, 0);
+                ud.weaponGroup.rotation.set(ud.type === 'q' ? 0.35 : 0, 0, ud.type === 'q' ? -0.15 : 0);
+                if (ud.extraLimbs.legs) {
+                    ud.extraLimbs.legs.forEach(l => l.rotation.set(0, 0, 0));
+                }
+            }
+
+            spawnStoneDustPuff(anim.endPos, 6);
+
+            if (anim.promotedTo && anim.attacker) {
+                scene.remove(anim.attacker);
+                const newMesh = createRealisticSculptedPiece(anim.promotedTo, anim.moverColor);
+                newMesh.position.copy(anim.endPos);
+                newMesh.userData.square = anim.targetSquare;
+                scene.add(newMesh);
+                pieceMeshes[anim.targetSquare] = newMesh;
+                triggerCombatHerald('IMPERIAL CONSECRATION', 'Halberdier Promoted', anim.moverColor === 'w');
+            }
+
+            document.getElementById('anim-status').innerHTML =
+                `<span class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span> Sanctum Ready`;
+
+            if (chess.in_check()) {
+                soundFX.playCheck();
+                triggerCombatHerald('CHECK', 'The Sovereign is Threatened', chess.turn() === 'b');
+            }
+
+            updateHUD();
+
+            if (chess.game_over()) {
+                showGameOverModal();
+                return;
+            }
+
+            if (gameMode === 'local2p' && autoFlipCamera) {
+                const nextTurn = chess.turn();
+                camState.targetTheta = nextTurn === 'w' ? 0 : Math.PI;
+                document.getElementById('camera-label').textContent = nextTurn === 'w' ? 'White View' : 'Black View';
+            }
+
+            if (gameMode === 'ai' && chess.turn() === 'b') {
+                setTimeout(makeArchmageAIMove, 380);
+            }
+        }
+
+        /***********************************************************************
+         * 8. ARCHMAGE AI (MINIMAX + POSITIONAL EVALUATION)
+         ***********************************************************************/
+        const pieceWeights = { p: 100, n: 320, b: 330, r: 500, q: 900, k: 20000 };
+
+        function evaluateBoard() {
+            const board = chess.board();
+            let score = 0;
+            for (let r = 0; r < 8; r++) {
+                for (let f = 0; f < 8; f++) {
+                    const p = board[r][f];
+                    if (!p) continue;
+                    let val = pieceWeights[p.type];
+                    if (r >= 2 && r <= 5 && f >= 2 && f <= 5) val += 18;
+                    score += p.color === 'w' ? val : -val;
+                }
+            }
+            return score;
+        }
+
+        function makeArchmageAIMove() {
+            if (chess.game_over() || currentAnimation || gameMode !== 'ai') return;
+            const moves = chess.moves({ verbose: true });
+            if (moves.length === 0) return;
+
+            let bestMove = moves[0];
+            let bestScore = Infinity;
+            moves.sort((a, b) => (b.captured ? 10 : 0) - (a.captured ? 10 : 0));
+
+            for (const m of moves) {
+                chess.move(m);
+                if (chess.in_checkmate()) {
+                    chess.undo();
+                    bestMove = m;
+                    break;
+                }
+                const replies = chess.moves({ verbose: true });
+                let maxWhiteReply = -Infinity;
+                if (replies.length === 0) {
+                    maxWhiteReply = 0;
+                } else {
+                    for (const rep of replies) {
+                        chess.move(rep);
+                        const ev = evaluateBoard() + (Math.random() * 12 - 6);
+                        if (ev > maxWhiteReply) maxWhiteReply = ev;
+                        chess.undo();
+                    }
+                }
+                chess.undo();
+
+                if (maxWhiteReply < bestScore) {
+                    bestScore = maxWhiteReply;
+                    bestMove = m;
+                }
+            }
+
+            executeMoveAnimated(bestMove);
+        }
+
+        /***********************************************************************
+         * 9. DUAL ONLINE PVP ENGINE (PEERJS WEBRTC + FIRESTORE CLOUD SYNC)
+         ***********************************************************************/
+        async function initOnlinePvP() {
+            // Check URL for ?room=XXXXXX auto-join parameter
+            const params = new URLSearchParams(window.location.search);
+            const roomParam = params.get('room');
+
+            try {
+                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                    const firebaseConfig = JSON.parse(__firebase_config);
+                    const app = initializeApp(firebaseConfig);
+                    auth = getAuth(app);
+                    db = getFirestore(app);
+
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        await signInAnonymously(auth);
+                    }
+
+                    onAuthStateChanged(auth, (user) => {
+                        currentUser = user;
+                        if (user && roomParam && roomParam.length === 6) {
+                            joinOnlineRoom(roomParam.toUpperCase());
+                        }
+                    });
+                    return;
+                }
+            } catch (err) {
+                console.warn("Firebase fallback to PeerJS WebRTC:", err);
+            }
+
+            if (roomParam && roomParam.length === 6) {
+                setTimeout(() => joinOnlineRoom(roomParam.toUpperCase()), 600);
+            }
+        }
+
+        function getRoomDocRef(roomCode) {
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'wizards-chess-3d';
+            return doc(db, 'artifacts', appId, 'public', 'data', 'chess_rooms', roomCode);
+        }
+
+        function setupPeerHost(code, playerName) {
+            if (typeof Peer === 'undefined') return;
+            try {
+                if (peerInstance) peerInstance.destroy();
+                peerInstance = new Peer(`WIZCHESS_${code}`);
+                peerInstance.on('connection', (conn) => {
+                    peerConn = conn;
+                    conn.on('open', () => {
+                        conn.send({ type: 'welcome', hostName: playerName });
+                    });
+                    conn.on('data', (data) => handlePeerData(data));
+                });
+            } catch (e) {}
+        }
+
+        function setupPeerGuest(code, playerName) {
+            if (typeof Peer === 'undefined') return;
+            try {
+                if (peerInstance) peerInstance.destroy();
+                peerInstance = new Peer();
+                peerInstance.on('open', () => {
+                    const conn = peerInstance.connect(`WIZCHESS_${code}`);
+                    peerConn = conn;
+                    conn.on('open', () => {
+                        conn.send({ type: 'joined', guestName: playerName });
+                        document.getElementById('pvp-modal').classList.add('hidden');
+                        document.getElementById('pvp-modal').classList.remove('flex');
+                        showFloatingEmote(`⚔️ Connected to Room ${code} as Black Obsidian!`);
+                    });
+                    conn.on('data', (data) => handlePeerData(data));
+                });
+            } catch (e) {}
+        }
+
+        function handlePeerData(data) {
+            if (!data || !data.type) return;
+            if (data.type === 'welcome') {
+                document.getElementById('white-player-name').textContent = data.hostName || 'White Host';
+            } else if (data.type === 'joined') {
+                document.getElementById('black-player-name').textContent = data.guestName || 'Black Challenger';
+                document.getElementById('room-wait-status').innerHTML =
+                    `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> Connected vs. <b>${data.guestName}</b>!`;
+                showFloatingEmote(`⚔️ ${data.guestName} joined the Sanctum!`);
+            } else if (data.type === 'move') {
+                clockWhite = data.clockW ?? clockWhite;
+                clockBlack = data.clockB ?? clockBlack;
+                executeMoveAnimated(data.move, true);
+            } else if (data.type === 'emote') {
+                showFloatingEmote(`${data.sender}: ${data.text}`);
+            } else if (data.type === 'reset') {
+                chess.reset();
+                clockWhite = 600;
+                clockBlack = 600;
+                lastMoveSquares = null;
+                syncBoardMeshesFull();
+                showFloatingEmote("🔄 Opponent initiated a Rematch!");
+            }
+        }
+
+        async function createOnlineRoom() {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            let code = '';
+            for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+
+            const playerName = document.getElementById('input-player-name').value.trim() || 'White Host';
+            myOnlineColor = 'w';
+            activeRoomId = code;
+            gameMode = 'online';
+
+            chess.reset();
+            clockWhite = 600;
+            clockBlack = 600;
+            lastMoveSquares = null;
+            syncBoardMeshesFull();
+
+            document.getElementById('active-room-box').classList.remove('hidden');
+            document.getElementById('display-room-code').textContent = code;
+            document.getElementById('pvp-btn-label').textContent = `Room: ${code}`;
+            document.getElementById('online-badge').textContent = `Room ${code} (White)`;
+            document.getElementById('white-player-name').textContent = playerName;
+
+            camState.targetTheta = 0;
+            setupPeerHost(code, playerName);
+
+            if (currentUser && db) {
+                try {
+                    const roomRef = getRoomDocRef(code);
+                    await setDoc(roomRef, {
+                        roomCode: code,
+                        hostUid: currentUser.uid,
+                        hostName: playerName,
+                        guestUid: '',
+                        guestName: 'Waiting...',
+                        movesJson: JSON.stringify([]),
+                        clockW: 600,
+                        clockB: 600,
+                        status: 'waiting',
+                        emoteJson: '',
+                        resetCounter: 0
+                    });
+                    subscribeToRoom(code);
+                } catch (e) {}
+            }
+        }
+
+        async function joinOnlineRoom(codeInput) {
+            const code = (codeInput || document.getElementById('input-room-code').value).trim().toUpperCase();
+            const errEl = document.getElementById('join-error-msg');
+            errEl.classList.add('hidden');
+
+            if (code.length !== 6) {
+                errEl.textContent = "Please enter a valid 6-character Room Code.";
+                errEl.classList.remove('hidden');
+                return;
+            }
+
+            const playerName = document.getElementById('input-player-name').value.trim() || 'Black Challenger';
+            myOnlineColor = 'b';
+            activeRoomId = code;
+            gameMode = 'online';
+
+            chess.reset();
+            syncBoardMeshesFull();
+
+            camState.targetTheta = Math.PI;
+            document.getElementById('camera-label').textContent = 'Black View';
+            document.getElementById('active-room-box').classList.remove('hidden');
+            document.getElementById('display-room-code').textContent = code;
+            document.getElementById('pvp-btn-label').textContent = `Room: ${code}`;
+            document.getElementById('online-badge').textContent = `Room ${code} (Black)`;
+            document.getElementById('black-player-name').textContent = playerName;
+
+            setupPeerGuest(code, playerName);
+
+            if (currentUser && db) {
+                try {
+                    const roomRef = getRoomDocRef(code);
+                    const snap = await getDoc(roomRef);
+                    if (snap.exists()) {
+                        const data = snap.data();
+                        myOnlineColor = data.hostUid === currentUser.uid ? 'w' : 'b';
+                        if (myOnlineColor === 'b') {
+                            await updateDoc(roomRef, {
+                                guestUid: currentUser.uid,
+                                guestName: playerName,
+                                status: 'playing'
+                            });
+                        }
+                        document.getElementById('pvp-modal').classList.add('hidden');
+                        document.getElementById('pvp-modal').classList.remove('flex');
+                        subscribeToRoom(code);
+                    }
+                } catch (e) {}
+            }
+        }
+
+        function subscribeToRoom(code) {
+            if (roomUnsubscribe) roomUnsubscribe();
+            const roomRef = getRoomDocRef(code);
+
+            roomUnsubscribe = onSnapshot(roomRef, (snap) => {
+                if (!snap.exists()) return;
+                const data = snap.data();
+
+                document.getElementById('white-player-name').textContent = data.hostName || 'White Marble';
+                document.getElementById('black-player-name').textContent = data.guestName || 'Black Obsidian';
+
+                const waitEl = document.getElementById('room-wait-status');
+                if (data.guestUid) {
+                    waitEl.innerHTML = `<span class="w-2 h-2 rounded-full bg-emerald-400"></span> Connected vs. <b>${data.guestName}</b>!`;
+                }
+
+                if (data.resetCounter && data.resetCounter > lastResetCounter) {
+                    lastResetCounter = data.resetCounter;
+                    chess.reset();
+                    clockWhite = 600;
+                    clockBlack = 600;
+                    lastMoveSquares = null;
+                    syncBoardMeshesFull();
+                    showFloatingEmote("🔄 Rematch started!");
+                    return;
+                }
+
+                const remoteMoves = JSON.parse(data.movesJson || '[]');
+                if (remoteMoves.length > chess.history().length) {
+                    const nextMove = remoteMoves[chess.history().length];
+                    if (nextMove) {
+                        clockWhite = data.clockW ?? clockWhite;
+                        clockBlack = data.clockB ?? clockBlack;
+                        executeMoveAnimated(nextMove, true);
+                    }
+                }
+
+                if (data.emoteJson) {
+                    try {
+                        const em = JSON.parse(data.emoteJson);
+                        if (em.id !== lastSyncedEmoteId) {
+                            lastSyncedEmoteId = em.id;
+                            showFloatingEmote(`${em.sender}: ${em.text}`);
+                        }
+                    } catch (e) {}
+                }
+            }, (err) => {
+                console.warn("Room snapshot error:", err);
+            });
+        }
+
+        async function pushMoveToOnlineRoom(moveResult) {
+            const cleanMove = {
+                from: moveResult.from,
+                to: moveResult.to,
+                promotion: moveResult.promotion || undefined
+            };
+            if (peerConn && peerConn.open) {
+                peerConn.send({ type: 'move', move: cleanMove, clockW: clockWhite, clockB: clockBlack });
+            }
+            if (activeRoomId && db && currentUser) {
+                try {
+                    const historyVerbose = chess.history({ verbose: true }).map(m => ({
+                        from: m.from,
+                        to: m.to,
+                        promotion: m.promotion || undefined
+                    }));
+                    await updateDoc(getRoomDocRef(activeRoomId), {
+                        movesJson: JSON.stringify(historyVerbose),
+                        clockW: clockWhite,
+                        clockB: clockBlack
+                    });
+                } catch (e) {}
+            }
+        }
+
+        async function sendEmote(text) {
+            const myName = document.getElementById('input-player-name').value.trim() || (chess.turn() === 'w' ? 'White' : 'Black');
+            if (gameMode === 'online' && activeRoomId) {
+                showFloatingEmote(`${myName}: ${text}`);
+                if (peerConn && peerConn.open) {
+                    peerConn.send({ type: 'emote', sender: myName, text });
+                }
+                if (db && currentUser) {
+                    const emotePayload = { id: Date.now() + Math.random(), sender: myName, text };
+                    lastSyncedEmoteId = emotePayload.id;
+                    try {
+                        await updateDoc(getRoomDocRef(activeRoomId), {
+                            emoteJson: JSON.stringify(emotePayload)
+                        });
+                    } catch (e) {}
+                }
+            } else {
+                showFloatingEmote(text);
+            }
+        }
+
+        function showFloatingEmote(message) {
+            const containerEl = document.getElementById('emote-container');
+            const bubble = document.createElement('div');
+            bubble.className = 'md3-card emote-bubble px-4 py-2 rounded-full border border-amber-400/50 text-xs sm:text-sm font-bold text-amber-100 shadow-xl';
+            bubble.textContent = message;
+            containerEl.appendChild(bubble);
+            soundFX.playSelect();
+            setTimeout(() => bubble.remove(), 3200);
+        }
+
+        /***********************************************************************
+         * 10. CAMERA CONTROLS (ORBIT, ZOOM & PRESETS)
+         ***********************************************************************/
+        const cameraPresets = [
+            { name: 'White View', theta: 0, phi: 0.88, radius: 12.6 },
+            { name: 'Black View', theta: Math.PI, phi: 0.88, radius: 12.6 },
+            { name: 'Side Arena', theta: Math.PI / 2, phi: 0.92, radius: 13.4 },
+            { name: 'Top Grid View', theta: 0, phi: 0.25, radius: 14.0 }
+        ];
+        let presetIndex = 0;
+
+        const camState = {
+            theta: 0,
+            phi: 0.88,
+            radius: 12.6,
+            targetTheta: 0,
+            targetPhi: 0.88,
+            targetRadius: 12.6,
+            isDragging: false,
+            dragDistance: 0,
+            prevX: 0,
+            prevY: 0
+        };
+
+        function updateCameraTransform() {
+            camState.theta += (camState.targetTheta - camState.theta) * 0.1;
+            camState.phi += (camState.targetPhi - camState.phi) * 0.1;
+            camState.radius += (camState.targetRadius - camState.radius) * 0.1;
+
+            const x = camState.radius * Math.sin(camState.phi) * Math.sin(camState.theta);
+            const y = camState.radius * Math.cos(camState.phi);
+            const z = camState.radius * Math.sin(camState.phi) * Math.cos(camState.theta);
+
+            let shakeX = 0, shakeY = 0;
+            if (screenShakeTime > 0) {
+                shakeX = (Math.random() - 0.5) * 0.32;
+                shakeY = (Math.random() - 0.5) * 0.32;
+            }
+
+            camera.position.set(x + shakeX, y + shakeY, z);
+            camera.lookAt(0, 0.38, 0);
+        }
+
+        /***********************************************************************
+         * 11. RAYCASTING & POINTER INTERACTION
+         ***********************************************************************/
+        const raycaster = new THREE.Raycaster();
+        const pointer = new THREE.Vector2();
+
+        renderer.domElement.addEventListener('pointerdown', (e) => {
+            soundFX.init();
+            camState.isDragging = true;
+            camState.dragDistance = 0;
+            camState.prevX = e.clientX;
+            camState.prevY = e.clientY;
+        });
+
+        window.addEventListener('pointermove', (e) => {
+            if (!camState.isDragging) return;
+            const dx = e.clientX - camState.prevX;
+            const dy = e.clientY - camState.prevY;
+            camState.dragDistance += Math.hypot(dx, dy);
+            camState.prevX = e.clientX;
+            camState.prevY = e.clientY;
+
+            camState.targetTheta -= dx * 0.0075;
+            camState.targetPhi = Math.max(0.22, Math.min(1.42, camState.targetPhi - dy * 0.0065));
+        });
+
+        window.addEventListener('pointerup', (e) => {
+            if (!camState.isDragging) return;
+            camState.isDragging = false;
+            if (camState.dragDistance < 8) {
+                handleBoardClick(e);
+            }
+        });
+
+        renderer.domElement.addEventListener('wheel', (e) => {
+            e.preventDefault();
+            camState.targetRadius = Math.max(6.8, Math.min(22, camState.targetRadius + e.deltaY * 0.008));
+        }, { passive: false });
+
+        function handleBoardClick(e) {
+            if (currentAnimation || chess.game_over()) return;
+            if (gameMode === 'ai' && chess.turn() === 'b') return;
+            if (gameMode === 'online' && chess.turn() !== myOnlineColor) {
+                showFloatingEmote(`⏳ Waiting for ${myOnlineColor === 'w' ? 'Black' : 'White'}'s move...`);
+                return;
+            }
+
+            const rect = renderer.domElement.getBoundingClientRect();
+            pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+            raycaster.setFromCamera(pointer, camera);
+
+            const interactables = [...Object.values(squareMeshes), ...Object.values(pieceMeshes)];
+            const hits = raycaster.intersectObjects(interactables, true);
+            if (hits.length === 0) {
+                selectedSquare = null;
+                legalMovesForSelected = [];
+                clearHighlights();
+                return;
+            }
+
+            let obj = hits[0].object;
+            while (obj && !obj.userData.square) {
+                obj = obj.parent;
+            }
+            if (!obj || !obj.userData.square) return;
+
+            const clickedSquare = obj.userData.square;
+
+            const candidateMove = legalMovesForSelected.find(m => m.to === clickedSquare);
+            if (selectedSquare && candidateMove) {
+                if (candidateMove.flags.includes('p')) {
+                    pendingPromotionMove = { from: selectedSquare, to: clickedSquare };
+                    document.getElementById('promotion-modal').classList.remove('hidden');
+                    document.getElementById('promotion-modal').classList.add('flex');
+                    return;
+                }
+                executeMoveAnimated({ from: selectedSquare, to: clickedSquare });
+                return;
+            }
+
+            const pieceOnSq = chess.get(clickedSquare);
+            if (pieceOnSq && pieceOnSq.color === chess.turn()) {
+                selectedSquare = clickedSquare;
+                legalMovesForSelected = chess.moves({ square: clickedSquare, verbose: true });
+                soundFX.playSelect();
+                showLegalHighlights(clickedSquare, legalMovesForSelected);
+            } else {
+                selectedSquare = null;
+                legalMovesForSelected = [];
+                clearHighlights();
+            }
+        }
+
+        document.querySelectorAll('.promo-choice').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const promoPiece = btn.getAttribute('data-promo');
+                document.getElementById('promotion-modal').classList.add('hidden');
+                document.getElementById('promotion-modal').classList.remove('flex');
+                if (pendingPromotionMove) {
+                    executeMoveAnimated({
+                        from: pendingPromotionMove.from,
+                        to: pendingPromotionMove.to,
+                        promotion: promoPiece
+                    });
+                    pendingPromotionMove = null;
+                }
+            });
+        });
+
+        /***********************************************************************
+         * 12. HUD UPDATES, DUAL CHESS CLOCKS & NAVIGATION CONTROLS
+         ***********************************************************************/
+        function formatClock(sec) {
+            const s = Math.max(0, Math.floor(sec));
+            const m = Math.floor(s / 60);
+            const rem = s % 60;
+            return `${String(m).padStart(2, '0')}:${String(rem).padStart(2, '0')}`;
+        }
+
+        setInterval(() => {
+            if (chess.game_over() || currentAnimation || chess.history().length === 0) return;
+            if (chess.turn() === 'w') {
+                clockWhite = Math.max(0, clockWhite - 1);
+            } else {
+                clockBlack = Math.max(0, clockBlack - 1);
+            }
+            document.getElementById('clock-w').textContent = formatClock(clockWhite);
+            document.getElementById('clock-b').textContent = formatClock(clockBlack);
+        }, 1000);
+
+        function updateHUD() {
+            const turn = chess.turn();
+            const turnText = document.getElementById('turn-text');
+            const statusBadge = document.getElementById('status-badge');
+            const wPill = document.getElementById('white-clock-pill');
+            const bPill = document.getElementById('black-clock-pill');
+
+            document.getElementById('clock-w').textContent = formatClock(clockWhite);
+            document.getElementById('clock-b').textContent = formatClock(clockBlack);
+
+            if (turn === 'w') {
+                turnText.textContent = "White's Turn";
+                turnText.className = "text-[10px] sm:text-xs font-bold uppercase tracking-wider text-amber-200";
+                wPill.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/25 border border-amber-400/60 turn-glow transition-all";
+                bPill.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 opacity-75 transition-all";
+            } else {
+                turnText.textContent = gameMode === 'ai' ? "Archmage Thinking..." : "Black's Turn";
+                turnText.className = "text-[10px] sm:text-xs font-bold uppercase tracking-wider text-rose-300";
+                bPill.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-rose-500/25 border border-rose-400/60 turn-glow transition-all";
+                wPill.className = "flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 opacity-75 transition-all";
+            }
+
+            if (chess.in_check()) {
+                statusBadge.classList.remove('hidden');
+                statusBadge.textContent = chess.in_checkmate() ? 'CHECKMATE' : 'CHECK';
+            } else {
+                statusBadge.classList.add('hidden');
+            }
+
+            const history = chess.history({ verbose: true });
+            document.getElementById('move-counter').textContent = `${history.length} ply`;
+            const moveListEl = document.getElementById('move-list');
+
+            if (history.length === 0) {
+                moveListEl.innerHTML = `<div class="text-slate-400 italic text-center py-4 font-sans text-[11px]">Select any sculpted piece to illuminate legal square boxes & targets.</div>`;
+            } else {
+                let html = '';
+                for (let i = 0; i < history.length; i += 2) {
+                    const moveNum = Math.floor(i / 2) + 1;
+                    const wMove = history[i];
+                    const bMove = history[i + 1];
+                    const wCap = wMove.captured ? '⚔' : '';
+                    const bCap = bMove && bMove.captured ? '⚔' : '';
+                    html += `
+                        <div class="flex items-center justify-between px-2.5 py-1 rounded-xl ${i + 2 >= history.length ? 'bg-amber-500/15 border border-amber-400/20' : 'bg-white/5'}">
+                            <span class="text-slate-500 w-7">${moveNum}.</span>
+                            <span class="flex-1 font-semibold text-amber-100">${wMove.san} <span class="text-rose-400 text-[10px]">${wCap}</span></span>
+                            <span class="flex-1 font-semibold text-rose-200">${bMove ? bMove.san : ''} <span class="text-rose-400 text-[10px]">${bCap}</span></span>
+                        </div>
+                    `;
+                }
+                moveListEl.innerHTML = html;
+                moveListEl.scrollTop = moveListEl.scrollHeight;
+            }
+
+            const capWhite = [];
+            const capBlack = [];
+            history.forEach(m => {
+                if (m.captured) {
+                    if (m.color === 'w') capBlack.push(unicodePieces[m.captured]);
+                    else capWhite.push(unicodePieces[m.captured]);
+                }
+            });
+
+            document.getElementById('captured-black').textContent = capBlack.join('');
+            document.getElementById('captured-white').textContent = capWhite.join('');
+
+            const matDiff = Math.round(evaluateBoard() / 100);
+            const evalEl = document.getElementById('eval-score');
+            if (matDiff > 0) evalEl.textContent = `Marble +${matDiff}`;
+            else if (matDiff < 0) evalEl.textContent = `Obsidian +${Math.abs(matDiff)}`;
+            else evalEl.textContent = `Even`;
+        }
+
+        function showGameOverModal() {
+            const modal = document.getElementById('gameover-modal');
+            const title = document.getElementById('gameover-title');
+            const sub = document.getElementById('gameover-subtitle');
+
+            if (chess.in_checkmate()) {
+                const winner = chess.turn() === 'w' ? 'Black Obsidian' : 'White Marble';
+                title.textContent = 'Checkmate in the Sanctum';
+                sub.textContent = `${winner} shatters the opposing monarch's defense!`;
+            } else {
+                title.textContent = 'Stalemate / Draw';
+                sub.textContent = 'The ancient duel concludes in an eternal balance.';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        document.getElementById('btn-pvp-lobby').addEventListener('click', () => {
+            soundFX.init();
+            document.getElementById('pvp-modal').classList.remove('hidden');
+            document.getElementById('pvp-modal').classList.add('flex');
+        });
+
+        document.getElementById('btn-close-pvp').addEventListener('click', () => {
+            document.getElementById('pvp-modal').classList.add('hidden');
+            document.getElementById('pvp-modal').classList.remove('flex');
+        });
+
+        document.getElementById('btn-create-room').addEventListener('click', createOnlineRoom);
+        document.getElementById('btn-join-room').addEventListener('click', () => joinOnlineRoom());
+
+        function copyTextToClipboard(text, statusEl, defaultText) {
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand('copy');
+            document.body.removeChild(ta);
+            statusEl.textContent = 'Copied!';
+            setTimeout(() => { statusEl.textContent = defaultText; }, 1800);
+        }
+
+        document.getElementById('btn-copy-code').addEventListener('click', () => {
+            if (!activeRoomId) return;
+            copyTextToClipboard(activeRoomId, document.getElementById('copy-code-text'), 'Code');
+        });
+
+        document.getElementById('btn-copy-link').addEventListener('click', () => {
+            if (!activeRoomId) return;
+            const url = `${window.location.origin}${window.location.pathname}?room=${activeRoomId}`;
+            copyTextToClipboard(url, document.getElementById('copy-link-text'), 'Invite Link');
+        });
+
+        function activateLocal2PMode() {
+            gameMode = 'local2p';
+            autoFlipCamera = true;
+            document.getElementById('mode-label').textContent = 'Mode: 2P Local';
+            document.getElementById('mode-icon').textContent = 'group';
+            document.getElementById('online-badge').textContent = '2P Pass & Play';
+            document.getElementById('autoflip-label').textContent = 'Auto-Flip: On';
+            document.getElementById('pvp-modal').classList.add('hidden');
+            document.getElementById('pvp-modal').classList.remove('flex');
+            showFloatingEmote("⚔️ Local 2P Pass & Play Activated! Camera auto-rotates each turn.");
+        }
+
+        document.getElementById('btn-start-local-2p').addEventListener('click', activateLocal2PMode);
+
+        document.getElementById('btn-mode').addEventListener('click', () => {
+            if (gameMode === 'ai') {
+                activateLocal2PMode();
+            } else {
+                gameMode = 'ai';
+                document.getElementById('mode-label').textContent = 'Mode: vs. AI';
+                document.getElementById('mode-icon').textContent = 'smart_toy';
+                document.getElementById('online-badge').textContent = 'vs. Archmage AI';
+                if (chess.turn() === 'b' && !chess.game_over()) {
+                    makeArchmageAIMove();
+                }
+            }
+        });
+
+        document.getElementById('btn-autoflip').addEventListener('click', () => {
+            autoFlipCamera = !autoFlipCamera;
+            document.getElementById('autoflip-label').textContent = autoFlipCamera ? 'Auto-Flip: On' : 'Auto-Flip: Off';
+        });
+
+        document.getElementById('btn-camera').addEventListener('click', () => {
+            presetIndex = (presetIndex + 1) % cameraPresets.length;
+            const p = cameraPresets[presetIndex];
+            camState.targetTheta = p.theta;
+            camState.targetPhi = p.phi;
+            camState.targetRadius = p.radius;
+            document.getElementById('camera-label').textContent = p.name;
+        });
+
+        document.getElementById('btn-undo').addEventListener('click', () => {
+            if (currentAnimation || gameMode === 'online') return;
+            if (gameMode === 'ai') {
+                chess.undo();
+                chess.undo();
+            } else {
+                chess.undo();
+            }
+            lastMoveSquares = null;
+            syncBoardMeshesFull();
+        });
+
+        document.getElementById('btn-history').addEventListener('click', () => {
+            document.getElementById('history-panel').classList.toggle('hidden');
+        });
+
+        document.getElementById('btn-sound').addEventListener('click', () => {
+            soundFX.enabled = !soundFX.enabled;
+            document.getElementById('sound-icon').textContent = soundFX.enabled ? 'volume_up' : 'volume_off';
+        });
+
+        document.querySelectorAll('.emote-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                soundFX.init();
+                sendEmote(btn.getAttribute('data-emote'));
+            });
+        });
+
+        async function resetGame() {
+            currentAnimation = null;
+            chess.reset();
+            clockWhite = 600;
+            clockBlack = 600;
+            lastMoveSquares = null;
+            syncBoardMeshesFull();
+            document.getElementById('gameover-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.remove('flex');
+
+            if (gameMode === 'online' && activeRoomId) {
+                if (peerConn && peerConn.open) {
+                    peerConn.send({ type: 'reset' });
+                }
+                if (db && currentUser) {
+                    lastResetCounter++;
+                    try {
+                        await updateDoc(getRoomDocRef(activeRoomId), {
+                            movesJson: JSON.stringify([]),
+                            clockW: 600,
+                            clockB: 600,
+                            resetCounter: lastResetCounter
+                        });
+                    } catch (e) {}
+                }
+            }
+        }
+
+        document.getElementById('btn-reset').addEventListener('click', resetGame);
+        document.getElementById('btn-modal-restart').addEventListener('click', resetGame);
+        document.getElementById('btn-modal-close').addEventListener('click', () => {
+            document.getElementById('gameover-modal').classList.add('hidden');
+            document.getElementById('gameover-modal').classList.remove('flex');
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        /***********************************************************************
+         * 13. MAIN RENDER & WEIGHTY ANATOMICAL CHARACTER ANIMATION LOOP
+         ***********************************************************************/
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const dt = Math.min(clock.getDelta(), 0.1);
+            const elapsed = clock.getElapsedTime();
+
+            if (screenShakeTime > 0) screenShakeTime -= dt;
+
+            // 1. Flicker Gothic Torches
+            torchLights.forEach((light, idx) => {
+                light.intensity = 1.35 + Math.sin(elapsed * 9 + idx * 2.1) * 0.18;
+                const flame = torchFlames[idx];
+                if (flame) {
+                    flame.scale.y = 0.9 + Math.sin(elapsed * 12 + idx) * 0.18;
+                    flame.rotation.y = elapsed * 2;
+                }
+            });
+
+            // 2. Float Cathedral Dust Motes
+            const posAttr = dustGeo.attributes.position;
+            for (let i = 0; i < dustCount; i++) {
+                let y = posAttr.getY(i) + dt * 0.20;
+                if (y > 12) y = 0;
+                posAttr.setY(i, y);
+            }
+            posAttr.needsUpdate = true;
+
+            // 3. Subtle Living Stone Idle Animations
+            Object.values(pieceMeshes).forEach(mesh => {
+                if (currentAnimation && (mesh === currentAnimation.attacker || mesh === currentAnimation.victim)) {
+                    return;
+                }
+                const ud = mesh.userData;
+                const phase = ud.phaseOffset + elapsed * 1.9;
+
+                // Subtle weighty stone breathing
+                ud.bodyGroup.position.y = Math.sin(phase) * 0.008;
+
+                if (ud.type === 'r') {
+                    // Imperial War Elephant: Multi-segment trunk S-curve breathing & ear fan
+                    if (ud.extraLimbs.trunkSegments) {
+                        ud.extraLimbs.trunkSegments.forEach((seg, idx) => {
+                            seg.rotation.z = Math.sin(phase + idx * 0.45) * 0.04;
+                            seg.rotation.x = (idx < 3 ? -0.18 : 0.28) + Math.cos(phase + idx * 0.35) * 0.05;
+                        });
+                    }
+                    if (ud.extraLimbs.ears) {
+                        ud.extraLimbs.ears[0].rotation.y = -0.38 + Math.sin(phase * 1.2) * 0.08;
+                        ud.extraLimbs.ears[1].rotation.y = 0.38 - Math.sin(phase * 1.2) * 0.08;
+                    }
+                } else if (ud.type === 'n') {
+                    // Destrier Warhorse: Subtle head toss & poised stance
+                    ud.headGroup.rotation.x = Math.sin(phase * 1.3) * 0.06;
+                } else if (ud.type === 'b') {
+                    // High Cathedral Inquisitor: Swinging incense censer pendulum & rotating relic
+                    if (ud.extraLimbs.censer) {
+                        ud.extraLimbs.censer.rotation.z = Math.sin(phase * 1.6) * 0.18;
+                        ud.extraLimbs.censer.rotation.x = Math.cos(phase * 1.6) * 0.12;
+                    }
+                    if (ud.extraLimbs.relicCrystal) {
+                        ud.extraLimbs.relicCrystal.rotation.y = elapsed * 1.8;
+                    }
+                } else if (ud.type === 'q') {
+                    // Battle-Empress: Rotating sovereign orb rings
+                    if (ud.extraLimbs.orbGroup) {
+                        ud.extraLimbs.orbGroup.children[1].rotation.x = elapsed * 1.5;
+                        ud.extraLimbs.orbGroup.children[2].rotation.y = elapsed * 1.8;
+                    }
+                }
+
+                if (selectedSquare && ud.square === selectedSquare) {
+                    mesh.position.y = 0.12 + Math.sin(elapsed * 5) * 0.03;
+                } else {
+                    mesh.position.y = 0;
+                }
+            });
+
+            // 4. Weighty Anatomical Move & Brutal Medieval Combat Sequences
+            if (currentAnimation) {
+                const anim = currentAnimation;
+                anim.elapsed += dt;
+                const t = Math.min(1, anim.elapsed / anim.duration);
+
+                if (anim.attacker) {
+                    const ud = anim.attacker.userData;
+
+                    if (!anim.isCapture) {
+                        const smooth = t * t * (3 - 2 * t);
+                        anim.attacker.position.lerpVectors(anim.startPos, anim.endPos, smooth);
+
+                        if (anim.attackerType === 'n') {
+                            // Destrier Warhorse Gallop & Vault over pieces
+                            anim.attacker.position.y = Math.sin(t * Math.PI) * 1.35;
+                            ud.bodyGroup.rotation.x = Math.cos(t * Math.PI) * -0.32;
+                            if (ud.extraLimbs.legs) {
+                                ud.extraLimbs.legs[2].rotation.x = -0.65 * Math.sin(t * Math.PI);
+                                ud.extraLimbs.legs[3].rotation.x = -0.45 * Math.sin(t * Math.PI);
+                            }
+                        } else if (anim.attackerType === 'r') {
+                            // Imperial War Elephant Heavy 4-Leg Articulated Stride with Dust Puffs
+                            const stride = t * Math.PI * 4;
+                            anim.attacker.position.y = Math.abs(Math.sin(stride)) * 0.06;
+                            ud.bodyGroup.rotation.z = Math.sin(stride) * 0.045;
+                            if (ud.extraLimbs.legs) {
+                                ud.extraLimbs.legs[0].rotation.x = Math.sin(stride) * 0.35;
+                                ud.extraLimbs.legs[1].rotation.x = -Math.sin(stride) * 0.35;
+                                ud.extraLimbs.legs[2].rotation.x = -Math.sin(stride) * 0.35;
+                                ud.extraLimbs.legs[3].rotation.x = Math.sin(stride) * 0.35;
+                            }
+                            if (t - anim.lastDustStep > 0.25) {
+                                anim.lastDustStep = t;
+                                spawnStoneDustPuff(anim.attacker.position, 4);
+                            }
+                        } else {
+                            // Heavy Stone March / Liturgical Glide
+                            const steps = t * Math.PI * 3;
+                            anim.attacker.position.y = Math.abs(Math.sin(steps)) * 0.07;
+                            ud.bodyGroup.rotation.z = Math.sin(steps) * 0.05;
+                        }
+                    } else {
+                        // BRUTAL WIZARD'S CHESS COMBAT & SHATTER SEQUENCE
+                        if (t < 0.50) {
+                            // Phase 1: Heavy Charge & Weapon / Trunk Wind-Up
+                            const p = t / 0.50;
+                            const stopRatio = anim.attackerType === 'b' ? 0.42 : 0.76;
+                            const strikePos = new THREE.Vector3().lerpVectors(anim.startPos, anim.endPos, stopRatio);
+                            anim.attacker.position.lerpVectors(anim.startPos, strikePos, p);
+
+                            if (anim.attackerType === 'n') {
+                                // Warhorse rears high on hindlegs
+                                ud.bodyGroup.rotation.x = -p * 0.55;
+                                anim.attacker.position.y = Math.sin(p * Math.PI) * 0.75;
+                            } else if (anim.attackerType === 'r') {
+                                // Elephant raises head & curls trunk high overhead
+                                ud.headGroup.rotation.x = -p * 0.45;
+                                if (ud.extraLimbs.trunkSegments) {
+                                    ud.extraLimbs.trunkSegments.forEach(s => { s.rotation.x = -p * 0.35; });
+                                }
+                            } else if (anim.attackerType === 'k') {
+                                // King raises massive two-handed broadsword high overhead
+                                ud.weaponGroup.position.y = 0.88 + p * 0.55;
+                                ud.weaponGroup.rotation.x = -p * 2.1;
+                            } else {
+                                ud.bodyGroup.rotation.x = -p * 0.32;
+                                ud.weaponGroup.rotation.x = -p * 0.95;
+                            }
+                        } else if (t < 0.72) {
+                            // Phase 2: Lethal Downward Cleave / Gore / Lance Impale
+                            const p = (t - 0.50) / 0.22;
+
+                            if (anim.attackerType === 'r') {
+                                ud.headGroup.rotation.x = -0.45 + p * 0.75;
+                                if (ud.extraLimbs.trunkSegments) {
+                                    ud.extraLimbs.trunkSegments.forEach(s => { s.rotation.x = -0.35 + p * 0.65; });
+                                }
+                            } else if (anim.attackerType === 'k') {
+                                ud.weaponGroup.position.y = 1.43 - p * 0.55;
+                                ud.weaponGroup.rotation.x = -2.1 + p * 2.6;
+                            } else {
+                                ud.bodyGroup.rotation.x = -0.32 + p * 0.68;
+                                ud.weaponGroup.rotation.x = -0.95 + p * 2.15;
+                            }
+
+                            if (!anim.shattered && p > 0.38) {
+                                anim.shattered = true;
+                                soundFX.playAttack(anim.attackerType);
+                                screenShakeTime = 0.38;
+
+                                if (anim.attackerType === 'b') {
+                                    spawnCathedralLightStrike(anim.attacker.position, anim.endPos, anim.moverColor);
+                                }
+                                if (anim.victim) {
+                                    spawnShatterEffect(anim.victim.position, anim.victimColor, anim.attackerType);
+                                    scene.remove(anim.victim);
+                                }
+                            }
+                        } else {
+                            // Phase 3: Advance into conquered square & recover stance
+                            const p = (t - 0.72) / 0.28;
+                            const stopRatio = anim.attackerType === 'b' ? 0.42 : 0.76;
+                            const strikePos = new THREE.Vector3().lerpVectors(anim.startPos, anim.endPos, stopRatio);
+                            anim.attacker.position.lerpVectors(strikePos, anim.endPos, p);
+                            anim.attacker.position.y = 0;
+                            ud.bodyGroup.rotation.x = (1 - p) * 0.36;
+                            ud.headGroup.rotation.x = 0;
+                            if (anim.attackerType === 'k') {
+                                ud.weaponGroup.position.y = 0.88;
+                                ud.weaponGroup.rotation.x = (1 - p) * 0.5;
+                            } else {
+                                ud.weaponGroup.rotation.x = (1 - p) * 1.2;
+                            }
+                        }
+                    }
+                }
+
+                if (anim.rookAnim) {
+                    const smooth = t * t * (3 - 2 * t);
+                    anim.rookAnim.mesh.position.lerpVectors(anim.rookAnim.from, anim.rookAnim.to, smooth);
+                }
+
+                if (t >= 1) {
+                    if (anim.attacker) {
+                        anim.attacker.position.copy(anim.endPos);
+                    }
+                    const finished = currentAnimation;
+                    currentAnimation = null;
+                    finalizeMoveAfterAnimation(finished);
+                }
+            }
+
+            // 5. Update Shattered Stone Shards, Dust Clouds & Shockwaves
+            updateDebris(dt);
+
+            // 6. Update Orbit Camera
+            updateCameraTransform();
+
+            renderer.render(scene, camera);
+        }
+
+        window.onload = function () {
+            syncBoardMeshesFull();
+            initOnlinePvP();
+            animate();
+        };
+    </script>
+</body>
+</html>
